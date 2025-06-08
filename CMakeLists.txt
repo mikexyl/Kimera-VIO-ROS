@@ -7,6 +7,12 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(catkin_simple REQUIRED)
 
+find_package(rerun_sdk REQUIRED)
+find_package(aria_common REQUIRED)
+find_package(aria_viz REQUIRED)
+find_package(spdlog REQUIRED)
+find_package(yaml-cpp REQUIRED)
+
 ### System Dependencies
 find_package(Boost REQUIRED COMPONENTS
   serialization system filesystem thread date_time regex timer chrono)
@@ -28,6 +34,7 @@ cs_add_library(${PROJECT_NAME}
   include/kimera_vio_ros/RosOnlineDataProvider.h
   include/kimera_vio_ros/RosPublishers.h
   include/kimera_vio_ros/RosVisualizer.h
+  include/kimera_vio_ros/RerunVisualizer.h
   include/kimera_vio_ros/utils/UtilsRos.h
   include/kimera_vio_ros/utils/CsvPublisher.h
   src/KimeraVioRos.cpp
@@ -41,12 +48,12 @@ cs_add_library(${PROJECT_NAME}
   src/utils/UtilsRos.cpp
   src/utils/CsvPublisher.cpp
 )
-target_link_libraries(${PROJECT_NAME} kimera_vio)
+target_link_libraries(${PROJECT_NAME} kimera_vio spdlog::spdlog yaml-cpp rerun_sdk aria_common aria_viz)
 
 cs_add_executable(${PROJECT_NAME}_node
   src/KimeraVioRosNode.cpp
 )
-target_link_libraries(${PROJECT_NAME}_node ${PROJECT_NAME})
+target_link_libraries(${PROJECT_NAME}_node ${PROJECT_NAME} )
 
 cs_add_executable(csv_publisher_node
   src/utils/CsvPublisherNode.cpp

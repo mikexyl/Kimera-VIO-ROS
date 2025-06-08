@@ -3,18 +3,17 @@
  * @author Antoni Rosinol
  */
 
-#include <ros/ros.h>
-#include <std_srvs/Trigger.h>
-
 #include <kimera-vio/pipeline/Pipeline-definitions.h>
 #include <kimera-vio/pipeline/Pipeline.h>
 #include <kimera-vio/utils/Macros.h>
+#include <ros/ros.h>
+#include <std_srvs/Trigger.h>
 
+#include "kimera_vio_ros/LcdRegistrationServer.h"
 #include "kimera_vio_ros/RosDataProviderInterface.h"
 #include "kimera_vio_ros/RosDisplay.h"
-#include "kimera_vio_ros/RosVisualizer.h"
 #include "kimera_vio_ros/RosLoopClosureVisualizer.h"
-#include "kimera_vio_ros/LcdRegistrationServer.h"
+#include "kimera_vio_ros/RosVisualizer.h"
 
 namespace VIO {
 
@@ -62,9 +61,14 @@ class KimeraVioRos {
   RosDataProviderInterface::UniquePtr data_provider_;
 
   //! Visualization
-  bool use_rviz_;  //! whether we want to use rviz for visualization or opencv.
+  enum class VizType {
+    kNone = 0,
+    kRviz,  //! Use RViz for visualization.
+    kRerun
+  };
+  VizType viz_type_;
   RosDisplay::UniquePtr ros_display_;
-  RosVisualizer::UniquePtr ros_visualizer_;
+  Visualizer3D::UniquePtr visualizer_;
   RosLoopClosureVisualizer::Ptr ros_lcd_visualizer_;
 
   //! ROS Services

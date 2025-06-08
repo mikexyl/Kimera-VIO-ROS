@@ -59,7 +59,8 @@
 		"vscode": {
 			"extensions": [
 				"llvm-vs-code-extensions.vscode-clangd",
-				"mutantdino.resourcemonitor"
+				"mutantdino.resourcemonitor",
+				"tamasfe.even-better-toml"
 			]
 		}
 	}

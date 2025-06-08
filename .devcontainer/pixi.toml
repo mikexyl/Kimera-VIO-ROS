@@ -18,3 +18,12 @@ roscore = { cmd = "roscore" }
 rqt = { cmd = "rqt --force-discover" }
 kmr-rviz = { cmd = "rviz -d $(rospack find kimera_vio_ros)/rviz/kimera_vio_euroc.rviz" }
 kmr-euroc = { cmd = "roslaunch kimera_vio_ros kimera_vio_ros_euroc.launch online:=true" }
+download-rerun = { cmd = "cd src && wget https://github.com/rerun-io/rerun/releases/download/0.23.3/rerun_cpp_sdk.zip && unzip rerun_cpp_sdk.zip && rm rerun_cpp_sdk.zip" }
+build-kmr = { cmd = "catkin build kimera_vio kimera_vio_ros --cmake-args -Daria_common_DIR=/workspaces/devel/lib/cmake/aria_common -Daria_viz_DIR=/workspaces/devel/lib/cmake/aria_viz" }
+
+[tasks.build-rerun]
+cmd = "cd src/rerun_cpp_sdk && mkdir -p build && cd build && cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_POSITION_INDEPENDENT_CODE=ON -G Ninja .. && ninja && sudo ninja install"
+
+
+[dependencies]
+cmake = "<4"
