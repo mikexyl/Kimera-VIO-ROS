@@ -27,7 +27,6 @@
 		"--privileged",
 		"--user=${localEnv:USER}",
 		"--gpus=all",
-		"--network=host",
 		"--mount", "type=bind,source=${localEnv:HOME}/workspaces/datasets,target=/datasets",
 		"-v", "/dev:/dev",
 		"--device-cgroup-rule", "c 81:* rmw",
@@ -60,7 +59,8 @@
 			"extensions": [
 				"llvm-vs-code-extensions.vscode-clangd",
 				"mutantdino.resourcemonitor",
-				"tamasfe.even-better-toml"
+				"tamasfe.even-better-toml",
+				"ms-toolsai.jupyter"
 			]
 		}
 	}

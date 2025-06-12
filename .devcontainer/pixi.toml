@@ -1,6 +1,6 @@
 [workspace]
 authors = ["Mike Xiangyu Liu <liu.xiangyu@ucy.ac.cy>"]
-channels = ["robostack-noetic", "conda-forge"]
+channels = ["conda-forge", "nvidia"]
 name = "kimera_noetic_ws"
 platforms = ["linux-64"]
 version = "0.1.0"
@@ -8,22 +8,90 @@ version = "0.1.0"
 [activation]
 scripts = ["/opt/ros/noetic/setup.sh", "devel/setup.sh"]
 
+[activation.env]
+LD_LIBRARY_PATH = "$LD_LIBRARY_PATH:/usr/local/lib:${PIXI_PROJECT_ROOT}/.pixi/envs/${PIXI_ENVIRONMENT_NAME}/lib"
+
 [tasks]
 clone-src = { cmd = "mkdir -p src && git clone git@github.com:MIT-SPARK/Kimera-VIO-ROS.git src/Kimera-VIO-ROS && vcs import src < src/Kimera-VIO-ROS/install/kimera_vio_ros_ssh.rosinstall" }
-catkin-config = { cmd = "catkin config --merge-devel -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_CXX_FLAGS=\"-Wno-error=unused-but-set-variable -Wno-error=deprecated-copy\" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache"  }
-build ={ cmd = "catkin build" }
-build-gtsam = { cmd = "cd src/gtsam && mkdir -p build && cd build && cmake -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Release -DGTSAM_USE_SYSTEM_EIGEN=ON -DGTSAM_POSE3_EXPMAP=ON -DGTSAM_ROT3_EXPMAP=ON -DGTSAM_TANGENT_PREINTEGRATION=OFF -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja -DGTSAM_BUILD_TESTS=OFF -DGTSAM_BUILD_EXAMPLES_ALWAYS=OFF .." }
+config = { cmd = [
+  "catkin",
+  "config",
+  "--merge-devel",
+  "-DCMAKE_BUILD_TYPE=Release",
+  "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+  "-DCMAKE_CXX_FLAGS=-Wno-error=unused-but-set-variable -Wno-error=deprecated-copy",
+  "-DCMAKE_C_COMPILER_LAUNCHER=ccache",
+  "-DCMAKE_CXX_COMPILER_LAUNCHER=ccache",
+  "-Donnxruntime_DIR=/workspaces/.pixi/envs/default",
+] }
+build-gtsam = { cmd = "cd src/gtsam && mkdir -p build && cd build && cmake -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Release -DGTSAM_USE_SYSTEM_METIS=ON -DGTSAM_BUILD_UNSTABLE=ON -DGTSAM_USE_SYSTEM_EIGEN=ON -DGTSAM_POSE3_EXPMAP=ON -DGTSAM_ROT3_EXPMAP=ON -DGTSAM_TANGENT_PREINTEGRATION=OFF -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja -DGTSAM_BUILD_TESTS=OFF -DGTSAM_BUILD_EXAMPLES_ALWAYS=OFF .. && ninja && sudo ninja install" }
+clean-ws = { cmd = "catkin clean -y" }
 rviz = { cmd = "rviz" }
 roscore = { cmd = "roscore" }
 rqt = { cmd = "rqt --force-discover" }
 kmr-rviz = { cmd = "rviz -d $(rospack find kimera_vio_ros)/rviz/kimera_vio_euroc.rviz" }
-kmr-euroc = { cmd = "roslaunch kimera_vio_ros kimera_vio_ros_euroc.launch online:=true" }
+kmr-euroc = { cmd = "roslaunch kimera_vio_ros kimera_vio_ros_euroc.launch online:=true verbosity:={{ v }}", args = [
+  "v",
+] }
 download-rerun = { cmd = "cd src && wget https://github.com/rerun-io/rerun/releases/download/0.23.3/rerun_cpp_sdk.zip && unzip rerun_cpp_sdk.zip && rm rerun_cpp_sdk.zip" }
-build-kmr = { cmd = "catkin build kimera_vio kimera_vio_ros --cmake-args -Daria_common_DIR=/workspaces/devel/lib/cmake/aria_common -Daria_viz_DIR=/workspaces/devel/lib/cmake/aria_viz" }
+build-kmr = { cmd = "catkin build kimera_vio kimera_vio_ros" }
+play-euroc = { cmd = "cd /datasets/euroc && rosbag play --clock -s 25 MH_01_easy.bag" }
+download-onnx = { cmd = "wget https://codeload.github.com/microsoft/onnxruntime/zip/refs/tags/v1.22.0" }
+jupyter = { cmd = "jupyter lab" }
+
+
+[tasks.xfeat-example]
+depends-on = [{ "task" = "build", "args" = ["xfeat-cpp"] }]
+cmd = "cd devel/bin && ./xfeat_example $PIXI_PROJECT_ROOT/src/xfeat-cpp/image $PIXI_PROJECT_ROOT/src/xfeat-cpp/onnx_model 0.5 2"
+
+[tasks.build]
+depends-on = ["config"]
+args = [{ "arg" = "package", "default" = "" }]
+cmd = "catkin build {{ package }} "
 
 [tasks.build-rerun]
 cmd = "cd src/rerun_cpp_sdk && mkdir -p build && cd build && cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_POSITION_INDEPENDENT_CODE=ON -G Ninja .. && ninja && sudo ninja install"
 
+[tasks.export-lg]
+args = [
+  { "arg" = "width", "default" = "640" },
+  { "arg" = "height", "default" = "352" },
+  { "arg" = "top_k", "default" = "1000" },
+]
+cmd = [
+  "cd",
+  "src/accelerated_features",
+  "&&",
+  "python",
+  "export.py",
+  "--xfeat_only_lighterglue",
+  "--width={{ width }}",
+  "--height={{ height }}",
+  "--top_k={{ top_k }}",
+  "--opset=18",
+  "--export_path=lg_{{ width }}x{{ height }}_{{ top_k }}.onnx",
+]
+
 
 [dependencies]
 cmake = "<4"
+catkin_tools = ">=0.9.5,<0.10"
+wget = ">=1.21.4,<2"
+git = ">=2.49.0,<3"
+onnx = "*"
+onnxruntime-cpp = "*"
+empy = ">=3.3.4,<4"
+jupyter = ">=1.1.1,<2"
+imageio = ">=2.37.0,<3"
+pytorch = "*"
+xformers = "*"
+tqdm = ">=4.67.1,<5"
+matplotlib = ">=3.10.3,<4"
+kornia = ">=0.8.1,<0.9"
+kornia-rs = ">=0.1.9,<0.2"
+py-opencv = ">=4.11.0,<5"
+onnxruntime = ">=1.22.0,<2"
+pip = ">=25.1.1,<26"
+
+[system-requirements]
+cuda = "12"
