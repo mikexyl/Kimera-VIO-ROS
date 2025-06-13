@@ -104,7 +104,7 @@ file and include this one to launch KimeraVIO on the dataset of your choice -->
   <arg name="close_on_error" default="true"/>
   <arg name="debug" default="false"/>
   <arg name="launch_prefix" value="" unless="$(arg debug)"/>
-  <arg name="launch_prefix" value="gdb -ex run --args" if="$(arg debug)"/>
+  <arg name="launch_prefix" value="kitty -e gdb -ex run --args" if="$(arg debug)"/>
 
   <arg name="flags_folder" default="$(arg params_folder)/flags"/>
   <arg name="include_pipeline_flags" default="false"/>
