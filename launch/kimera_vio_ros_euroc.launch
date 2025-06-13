@@ -3,6 +3,8 @@
   <arg name="verbosity"    default="0" />
   <arg name="do_coarse_temporal_sync" default="false"/>
   <arg name="do_fine_temporal_sync" default="false"/>
+  <!-- 0: none, 1: rviz, 2: rrun -->
+  <arg name="use_visualizer" default="2"/>
 
   <!-- Set online to true if you use rosbag play or sensor stream -->
   <arg name="online" default="false" />

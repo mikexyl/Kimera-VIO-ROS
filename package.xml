@@ -37,5 +37,9 @@
   <depend>pcl_msgs</depend>
   <depend>pcl_conversions</depend>
 
+  <depend>aria_viz</depend>
+  <depend>aria_common</depend>
+  <depend>fmt</depend>
+
   <test_depend>rosunit</test_depend>
 </package>

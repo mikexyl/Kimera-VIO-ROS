@@ -25,6 +25,7 @@
 #include <kimera-vio/utils/Timer.h>
 
 // Dependencies from this repository
+#include "kimera_vio_ros/RerunVisualizer.h"
 #include "kimera_vio_ros/RosBagDataProvider.h"
 #include "kimera_vio_ros/RosDataProviderInterface.h"
 #include "kimera_vio_ros/RosOnlineDataProvider.h"
@@ -40,7 +41,7 @@ KimeraVioRos::KimeraVioRos()
       vio_pipeline_(nullptr),
       use_lcd_registration_server_(false),
       ros_display_(nullptr),
-      ros_visualizer_(nullptr),
+      visualizer_(nullptr),
       data_provider_(nullptr),
       restart_vio_pipeline_srv_(),
       restart_vio_pipeline_(false) {
@@ -48,7 +49,9 @@ KimeraVioRos::KimeraVioRos()
   restart_vio_pipeline_srv_ = nh_private_.advertiseService(
       "restart_kimera_vio", &KimeraVioRos::restartKimeraVio, this);
 
-  CHECK(nh_private_.getParam("use_rviz", use_rviz_));
+  int viz_type_int;
+  CHECK(nh_private_.getParam("use_visualizer", viz_type_int));
+  viz_type_ = static_cast<VizType>(viz_type_int);
 
   nh_private_.getParam("use_lcd_registration_server",
                        use_lcd_registration_server_);
@@ -85,18 +88,37 @@ bool KimeraVioRos::runKimeraVio() {
   // the data provider.
   // NOTE: had the data provider been destroyed before, the vio would be calling
   // the shutdown function of a deleted object, aka segfault.
-  if (use_rviz_) {
+  if (viz_type_ != VizType::kNone) {
     VLOG(1) << "Destroy Ros Display.";
     ros_display_.reset();
-    ros_visualizer_.reset();
+    visualizer_.reset();
 
-    VLOG(1) << "Creating Ros Display.";
-    CHECK(vio_params_);
+    if (viz_type_ == VizType::kRerun) {
+      // Get ROS params
+      std::string base_link_frame_id_;
+      std::string odom_frame_id_;
+      std::string map_frame_id_;
+      CHECK(nh_private_.getParam("base_link_frame_id", base_link_frame_id_));
+      CHECK(!base_link_frame_id_.empty());
+      CHECK(nh_private_.getParam("odom_frame_id", odom_frame_id_));
+      CHECK(!odom_frame_id_.empty());
+      CHECK(nh_private_.getParam("map_frame_id", map_frame_id_));
+      CHECK(!map_frame_id_.empty());
+
+      VLOG(1) << "Creating Rerun Display.";
+      CHECK(vio_params_);
+      visualizer_ = std::make_unique<RerunVisualizer>(
+          base_link_frame_id_, odom_frame_id_, map_frame_id_);
+    } else if (viz_type_ == VizType::kRviz) {
+      VLOG(1) << "Creating Ros Display.";
+      CHECK(vio_params_);
+      visualizer_ = std::make_unique<RosVisualizer>(*vio_params_);
+    }
+
     ros_display_ = std::make_unique<RosDisplay>();
-    ros_visualizer_ = std::make_unique<RosVisualizer>(*vio_params_);
   } else {
     ros_display_ = nullptr;
-    ros_visualizer_ = nullptr;
+    visualizer_ = nullptr;
   }
 
   ros_lcd_visualizer_.reset(new RosLoopClosureVisualizer());
@@ -117,13 +139,13 @@ bool KimeraVioRos::runKimeraVio() {
   // the data provider may modify the init gt pose.
   VLOG(1) << "Creating Data Provider.";
   data_provider_ = createDataProvider(*vio_params_);
-  CHECK(data_provider_) << "Data provider construction failed.";
+  CHECK(data_provider_, "Data provider construction failed.");
 
   // Then, create Kimera-VIO from scratch.
   VLOG(1) << "Creating Kimera-VIO.";
-  if (use_rviz_) {
+  if (viz_type_ != VizType::kNone) {
     CHECK(ros_display_);
-    CHECK(ros_visualizer_);
+    CHECK(visualizer_);
   }
 
   vio_pipeline_ = nullptr;
@@ -131,21 +153,21 @@ bool KimeraVioRos::runKimeraVio() {
     case VIO::FrontendType::kMonoImu: {
       vio_pipeline_ =
           std::make_unique<MonoImuPipeline>(*vio_params_,
-                                            std::move(ros_visualizer_),
+                                            std::move(visualizer_),
                                             std::move(ros_display_),
                                             std::move(preloaded_vocab));
     } break;
     case VIO::FrontendType::kStereoImu: {
       vio_pipeline_ =
           std::make_unique<StereoImuPipeline>(*vio_params_,
-                                              std::move(ros_visualizer_),
+                                              std::move(visualizer_),
                                               std::move(ros_display_),
                                               std::move(preloaded_vocab));
     } break;
     case VIO::FrontendType::kRgbdImu: {
       vio_pipeline_ =
           std::make_unique<RgbdImuPipeline>(*vio_params_,
-                                            std::move(ros_visualizer_),
+                                            std::move(visualizer_),
                                             std::move(ros_display_),
                                             std::move(preloaded_vocab));
     } break;
@@ -156,7 +178,7 @@ bool KimeraVioRos::runKimeraVio() {
     } break;
   }
 
-  CHECK(vio_pipeline_) << "Vio pipeline construction failed.";
+  CHECK(vio_pipeline_, "Vio pipeline construction failed.");
   if (use_lcd_registration_server_) {
     LcdModule* lcd = vio_pipeline_->getLcdModule();
     if (!lcd) {
@@ -304,7 +326,8 @@ void KimeraVioRos::connectVIO() {
                 std::placeholders::_1));
 
   if (vio_params_->frontend_type_ == VIO::FrontendType::kStereoImu) {
-    auto stereo_pipeline = dynamic_cast<StereoImuPipeline*>(vio_pipeline_.get());
+    auto stereo_pipeline =
+        dynamic_cast<StereoImuPipeline*>(vio_pipeline_.get());
     CHECK(stereo_pipeline);
 
     data_provider_->registerRightFrameCallback(

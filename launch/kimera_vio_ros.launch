@@ -94,9 +94,9 @@ file and include this one to launch KimeraVIO on the dataset of your choice -->
   <!-- Note that this is duplicated from the flags file -->
   <arg name="visualize"    default="true" />
   <!-- Type of visualization: 0: 2d3d_mesh, 1: pointcloud, 2: none -->
-  <arg name="viz_type"     default="0" />
+  <arg name="viz_type"     default="2" />
   <!-- Use Rviz for visualization or OpenCV -->
-  <arg name="use_rviz"     default="true"/>
+  <arg name="use_visualizer"     default="1"/>
 
   <!-- Only here for convenience -->
   <arg name="run_stereo_dense"     default="false"/>
@@ -104,7 +104,7 @@ file and include this one to launch KimeraVIO on the dataset of your choice -->
   <arg name="close_on_error" default="true"/>
   <arg name="debug" default="false"/>
   <arg name="launch_prefix" value="" unless="$(arg debug)"/>
-  <arg name="launch_prefix" value="gdb -ex run --args" if="$(arg debug)"/>
+  <arg name="launch_prefix" value="kitty -e gdb -ex run --args" if="$(arg debug)"/>
 
   <arg name="flags_folder" default="$(arg params_folder)/flags"/>
   <arg name="include_pipeline_flags" default="false"/>
@@ -224,7 +224,7 @@ file and include this one to launch KimeraVIO on the dataset of your choice -->
     <param name="mono_ransac_threshold"   value="30"/>
 
     <!-- Visualize in Rviz or in OpenCV -->
-    <param name="use_rviz"                value="$(arg use_rviz)"/>
+    <param name="use_visualizer"                value="$(arg use_visualizer)"/>
 
     <!-- TODO(nathan) consider not linking directly to arg -->
     <!-- Enable external processes to ask for a registration between two frames -->
