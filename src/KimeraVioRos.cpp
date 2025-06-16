@@ -56,6 +56,11 @@ KimeraVioRos::KimeraVioRos()
   nh_private_.getParam("use_lcd_registration_server",
                        use_lcd_registration_server_);
 
+  CHECK(not FLAGS_use_lcd, "LCD disabled temporarily for developping xfeat.");
+  CHECK(not use_lcd_registration_server_,
+        "LCD registration server is "
+        "disabled temporarily for developing xfeat.");
+
   // Parse VIO parameters
   std::string params_path;
   CHECK(nh_private_.getParam("params_folder_path", params_path));
