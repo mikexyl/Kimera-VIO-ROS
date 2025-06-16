@@ -17,6 +17,7 @@
   <!-- Set to true and specify gt_topic if you want to log ground-truth data -->
   <arg name="log_gt_data" default="false"/>
   <arg name="gt_topic" default=""/>
+  <arg name="viz_type" default="1"/>
 
   <arg name="debug" default="0"/>
 

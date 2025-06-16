@@ -60,7 +60,8 @@
 				"llvm-vs-code-extensions.vscode-clangd",
 				"mutantdino.resourcemonitor",
 				"tamasfe.even-better-toml",
-				"ms-toolsai.jupyter"
+				"ms-toolsai.jupyter",
+				"yzhang.markdown-all-in-one"
 			]
 		}
 	}

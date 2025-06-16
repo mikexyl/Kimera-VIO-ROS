@@ -1,25 +1,28 @@
 {
 	"folders": [
 		{
-			"path": "../kimera_vio_ros"
+			"path": "../../xfeat-cpp"
 		},
 		{
-			"path": "../../MIT-SPARK/Kimera-VIO"
+			"path": "../../Kimera-VIO"
 		},
 		{
-			"path": "../../dorian3d"
+			"path": "../../aria"
 		},
 		{
-			"path": "../kimera_graph_msgs"
+			"path": ".."
 		},
 		{
-			"path": "../kimera_common"
+			"path": "../../vio-factors"
 		},
 		{
-			"path": "../kimera_graph_visualizer"
+			"path": "../../gtsam"
 		},
 		{
 			"path": "../../accelerated_features"
+		},
+		{
+			"path": "../../VLAD-BuFF"
 		}
 	],
 	"settings": {}

@@ -29,6 +29,13 @@ class RerunVisualizer : public VIO::Visualizer3D, aria::viz::VisualizerRerun {
                  0.3,
                  false);
 
+    odom_traj_.push_back(input.backend_output_->W_State_Blkf_.pose_);
+    this->drawTrajectory(map_ / odom_ / "trajectory",
+                         odom_traj_,
+                         aria::viz::ColorMap::kGreen,
+                         0.5f,
+                         false);
+
     cv::Mat tracking_image_clone =
         input.frontend_output_->getTrackingImage()->clone();
 
@@ -38,7 +45,9 @@ class RerunVisualizer : public VIO::Visualizer3D, aria::viz::VisualizerRerun {
                       true);
     }
 
-    visualizeGraphInSmoother(input);
+    // visualizeGraphInSmoother(input);
+
+    visualizeLandmarks(input);
 
     return std::make_unique<VIO::VisualizerOutput>();
   }
@@ -62,10 +71,30 @@ class RerunVisualizer : public VIO::Visualizer3D, aria::viz::VisualizerRerun {
     }
   }
 
+  void visualizeLandmarks(const VIO::VisualizerInput& input) {
+    std::vector<Point3> landmarks;
+    std::vector<long> ids;
+    for (const auto& [id, lmk] :
+         input.backend_output_->landmarks_with_id_map_) {
+      landmarks.push_back(lmk);
+      ids.push_back(id);
+    }
+
+    this->drawLandmarks(map_ / odom_ / "landmarks",
+                        landmarks,
+                        {},
+                        {aria::viz::ColorMap::kBlue},
+                        {0.1f},
+                        {},
+                        false);
+  }
+
  private:
   std::filesystem::path baselink_;
   std::filesystem::path map_;
   std::filesystem::path odom_;
+
+  std::vector<Pose3> odom_traj_{};
 };
 
 }  // namespace VIO
