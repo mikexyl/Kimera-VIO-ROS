@@ -23,6 +23,15 @@
 		},
 		{
 			"path": "../../VLAD-BuFF"
+		},
+		{
+			"path": "../../../.pixi"
+		},
+		{
+			"path": "../../onnxruntime-linux-x64-gpu-1.22.0"
+		},
+		{
+			"path": "../../faiss"
 		}
 	],
 	"settings": {}

@@ -16,8 +16,10 @@ RUN --mount=type=cache,target=/var/cache/apt \
     ros-$ROS_DISTRO-realsense2-camera \
     ros-$ROS_DISTRO-rqt-graph \
     ros-$ROS_DISTRO-rqt-tf-tree \
+    ros-$ROS_DISTRO-image-pipeline \
     libspdlog-dev libgraphviz-dev kitty \
-    libmetis-dev libgflags-dev libgoogle-glog-dev googletest && \
+    libmetis-dev libgflags-dev libgoogle-glog-dev googletest \
+    python3-catkin-tools libmkl-dev libcublas-dev libblas-dev && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
@@ -45,13 +47,6 @@ RUN curl -L -o /usr/local/bin/pixi -fsSL --compressed "https://github.com/prefix
     && chmod +x /usr/local/bin/pixi \
     && pixi info
 
-# install gcc-11
-RUN add-apt-repository -y ppa:ubuntu-toolchain-r/test && \
-    apt-get update && \
-    apt-get install -y gcc-13 g++-13 && \
-    update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-13 60 --slave /usr/bin/g++ g++ /usr/bin/g++-13 && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
-
 # change to USER and install rust
 USER $USERNAME
 RUN curl https://sh.rustup.rs -sSf | sh -s -- -y && \
@@ -60,11 +55,4 @@ RUN curl https://sh.rustup.rs -sSf | sh -s -- -y && \
     rustup default stable
 
 RUN echo 'eval "$(pixi completion -s zsh)"' >> $HOME/.zshrc
-
-# install Miniforge (Mamba/Conda) for the user
-# RUN wget --quiet https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh -O /tmp/miniforge.sh && \
-#     bash /tmp/miniforge.sh -b -p $HOME/miniforge && \
-#     rm /tmp/miniforge.sh && \
-#     echo 'export PATH="$HOME/miniforge/bin:$PATH"' >> $HOME/.bashrc && \
-#     $HOME/miniforge/bin/conda init bash
 

@@ -1,6 +1,6 @@
 [workspace]
 authors = ["Mike Xiangyu Liu <liu.xiangyu@ucy.ac.cy>"]
-channels = ["conda-forge", "nvidia"]
+channels = ["rapidsai-nightly", "conda-forge", "nvidia", "rapidsai"]
 name = "kimera_noetic_ws"
 platforms = ["linux-64"]
 version = "0.1.0"
@@ -9,7 +9,8 @@ version = "0.1.0"
 scripts = ["/opt/ros/noetic/setup.sh", "devel/setup.sh"]
 
 [activation.env]
-LD_LIBRARY_PATH = "$LD_LIBRARY_PATH:/usr/local/lib:${PIXI_PROJECT_ROOT}/.pixi/envs/${PIXI_ENVIRONMENT_NAME}/lib"
+# LD_LIBRARY_PATH = "$LD_LIBRARY_PATH:/usr/local/lib:${PIXI_PROJECT_ROOT}/.pixi/envs/${PIXI_ENVIRONMENT_NAME}/lib"
+FAISS_CMAKE_ARGS = "-DFAISS_ENABLE_GPU=ON -DFAISS_ENABLE_PYTHON=ON -DFAISS_ENABLE_CUVS=ON -Dcuvs_DIR=/workspaces/.pixi/envs/default/lib/cmake/cuvs -DBUILD_TESTING=OFF"
 
 [tasks]
 clone-src = { cmd = "mkdir -p src && git clone git@github.com:MIT-SPARK/Kimera-VIO-ROS.git src/Kimera-VIO-ROS && vcs import src < src/Kimera-VIO-ROS/install/kimera_vio_ros_ssh.rosinstall" }
@@ -22,7 +23,11 @@ config = { cmd = [
   "-DCMAKE_CXX_FLAGS=-Wno-error=unused-but-set-variable -Wno-error=deprecated-copy",
   "-DCMAKE_C_COMPILER_LAUNCHER=ccache",
   "-DCMAKE_CXX_COMPILER_LAUNCHER=ccache",
-  "-Donnxruntime_DIR=/workspaces/.pixi/envs/default",
+  "-DCMAKE_C_COMPILER=gcc",
+  "-DCMAKE_CXX_COMPILER=g++",
+  "-Donnxruntime_DIR=/workspaces/src/onnxruntime-linux-x64-gpu-1.22.0",
+  "-DCUBLAS_DIR=/usr/local/cuda",
+  "-Dfaiss_DIR=/workspaces/src/faiss/build",
 ] }
 build-gtsam = { cmd = "cd src/gtsam && mkdir -p build && cd build && cmake -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Release -DGTSAM_USE_SYSTEM_METIS=ON -DGTSAM_BUILD_UNSTABLE=ON -DGTSAM_USE_SYSTEM_EIGEN=ON -DGTSAM_POSE3_EXPMAP=ON -DGTSAM_ROT3_EXPMAP=ON -DGTSAM_TANGENT_PREINTEGRATION=OFF -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja -DGTSAM_BUILD_TESTS=OFF -DGTSAM_BUILD_EXAMPLES_ALWAYS=OFF .. && ninja && sudo ninja install" }
 clean-ws = { cmd = "catkin clean -y" }
@@ -52,6 +57,10 @@ cmd = "catkin build {{ package }} "
 [tasks.build-rerun]
 cmd = "cd src/rerun_cpp_sdk && mkdir -p build && cd build && cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_POSITION_INDEPENDENT_CODE=ON -G Ninja .. && ninja && sudo ninja install"
 
+[tasks.build-all]
+depends-on = ["build-gtsam", "build-rerun", "config", "build-kmr"]
+cmd = ["echo 'Built Kimera VIO ROS workspace.'"]
+
 [tasks.export-lg]
 args = [
   { "arg" = "width", "default" = "640" },
@@ -73,25 +82,44 @@ cmd = [
 ]
 
 
+[tasks.extract-netvlad-desc]
+depends-on = [{ "task" = "build", "args" = ["xfeat-cpp"] }]
+args = [
+  { "arg" = "image_folder", "default" = "/datasets/gsv_cities/Images" },
+  { "arg" = "output_desc_file", "default" = "$PIXI_PROJECT_ROOT/src/xfeat-cpp/faiss_ivfflat.index.desc.bin" },
+  { "arg" = "model_folder", "default" = "$PIXI_PROJECT_ROOT/src/xfeat-cpp/onnx_model" },
+]
+cmd = [
+  "cd",
+  "build/xfeat-cpp/scripts",
+  "&&",
+  "extract_netvlad_desc",
+  "{{ image_folder }}",
+  "{{ output_desc_file }}",
+  "{{ model_folder }}",
+]
+
+[tasks.train-faiss-ivf]
+depends-on = [{ "task" = "build", "args" = ["xfeat-cpp"] }]
+args = [
+  { "arg" = "mode", default = "ivfflat" },
+  { "arg" = "data_file", "default" = "$PIXI_PROJECT_ROOT/src/xfeat-cpp/faiss.index.desc.bin" },
+  { "arg" = "output_index_file", "default" = "$PIXI_PROJECT_ROOT/src/xfeat-cpp/onnx_model/faiss" },
+]
+cmd = [
+  "cd",
+  "build/xfeat-cpp/scripts",
+  "&&",
+  "train_faiss_ivfflat",
+  "{{ data_file }}",
+  "{{ output_index_file }}",
+  "{{ mode }}",
+]
+
+
 [dependencies]
 cmake = "<4"
-catkin_tools = ">=0.9.5,<0.10"
-wget = ">=1.21.4,<2"
-git = ">=2.49.0,<3"
-onnx = "*"
-onnxruntime-cpp = "*"
-empy = ">=3.3.4,<4"
-jupyter = ">=1.1.1,<2"
-imageio = ">=2.37.0,<3"
-pytorch = "*"
-xformers = "*"
-tqdm = ">=4.67.1,<5"
-matplotlib = ">=3.10.3,<4"
-kornia = ">=0.8.1,<0.9"
-kornia-rs = ">=0.1.9,<0.2"
-py-opencv = ">=4.11.0,<5"
-onnxruntime = ">=1.22.0,<2"
-pip = ">=25.1.1,<26"
+swig = ">=4.3.1,<5"
 
 [system-requirements]
 cuda = "12"
