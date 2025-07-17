@@ -1,28 +1,39 @@
 #pragma once
 
 #include <aria_viz/visualizer_rerun.h>
+#include <kimera-vio/loopclosure/LoopClosureDetector-definitions.h>
+#include <kimera-vio/loopclosure/LoopClosureDetector.h>
 #include <kimera-vio/visualizer/Visualizer3D.h>
+#include <kimera_vio_ros/LoopClosureVisualizer.h>
+#include <spdlog/fmt/fmt.h>
 
 namespace VIO {
 
-class RerunVisualizer : public VIO::Visualizer3D, aria::viz::VisualizerRerun {
+class RerunVisualizer : public Visualizer3D,
+                        aria::viz::VisualizerRerun,
+                        public LoopClosureVisualizer {
  public:
   RerunVisualizer(std::string base_link_frame_id = "baselink",
                   std::string odom_frame_id = "odom",
-                  std::string map_frame_id = "map")
+                  std::string map_frame_id = "map",
+                  std::optional<std::string> recording_id = std::nullopt)
       : VIO::Visualizer3D(VIO::VisualizationType::kNone),
         aria::viz::VisualizerRerun(aria::viz::VisualizerRerun::Params(
             "kimera_vio",
-            std::nullopt,
+            recording_id,
             "rerun+http://172.17.0.1:9876/proxy")),
         baselink_(base_link_frame_id),
         map_(map_frame_id),
-        odom_(odom_frame_id) {}
+        odom_(odom_frame_id) {
+    // draw the origin frame for visualization
+    this->drawTf(map_, Pose3::Identity(), 0.3, true);
+  }
 
   virtual ~RerunVisualizer() = default;
 
   VIO::VisualizerOutput::UniquePtr spinOnce(
       const VIO::VisualizerInput& input) override {
+    std::lock_guard<std::mutex> lock(rerun_mutex_);
     this->setTimeNSec(input.timestamp_);
     this->drawTf(map_ / odom_ / baselink_,
                  input.backend_output_->W_State_Blkf_.pose_,
@@ -53,7 +64,6 @@ class RerunVisualizer : public VIO::Visualizer3D, aria::viz::VisualizerRerun {
   }
 
   void visualizeGraphInSmoother(const VIO::VisualizerInput& input) {
-    // No-op for RerunVisualizer.
     this->drawPoints(map_ / odom_ / "smoother" / "values",
                      input.backend_output_->state_,
                      {aria::viz::ColorMap::kRed},
@@ -89,12 +99,42 @@ class RerunVisualizer : public VIO::Visualizer3D, aria::viz::VisualizerRerun {
                         false);
   }
 
+  void publishLcdOutput(const LcdOutput::ConstPtr& lcd_output) override {
+    std::lock_guard<std::mutex> lock(rerun_mutex_);
+
+    this->setTimeNSec(lcd_output->timestamp_);
+    this->drawTf(map_ / odom_, lcd_output->Map_Pose_Odom_, 0.3, false);
+
+    CHECK(lcd_output);
+    if (lcd_output->is_loop_closure_) {
+      std::string message =
+          fmt::format("Loop closure detected: match id {}, recent id {} ",
+                      lcd_output->id_match_,
+                      lcd_output->id_recent_);
+      this->rec()->log(
+          "lcd_log",
+          rerun::TextLog(message).with_level(rerun::TextLogLevel::Info));
+    }
+
+    auto opt_traj = lcd_output->states_;
+    if (not opt_traj.empty()) {
+      this->drawFactors(map_ / "pose_graph",
+                        lcd_output->nfg_,
+                        lcd_output->states_,
+                        {aria::viz::ColorMap::kBlue},
+                        0.5f,
+                        false);
+    }
+  }
+
  private:
   std::filesystem::path baselink_;
   std::filesystem::path map_;
   std::filesystem::path odom_;
 
   std::vector<Pose3> odom_traj_{};
+
+  std::mutex rerun_mutex_;
 };
 
 }  // namespace VIO

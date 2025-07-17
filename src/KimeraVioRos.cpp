@@ -56,11 +56,6 @@ KimeraVioRos::KimeraVioRos()
   nh_private_.getParam("use_lcd_registration_server",
                        use_lcd_registration_server_);
 
-  CHECK(not FLAGS_use_lcd, "LCD disabled temporarily for developping xfeat.");
-  CHECK(not use_lcd_registration_server_,
-        "LCD registration server is "
-        "disabled temporarily for developing xfeat.");
-
   // Parse VIO parameters
   std::string params_path;
   CHECK(nh_private_.getParam("params_folder_path", params_path));
@@ -112,21 +107,31 @@ bool KimeraVioRos::runKimeraVio() {
 
       VLOG(1) << "Creating Rerun Display.";
       CHECK(vio_params_);
+      std::string now_str;
+      // Get the current time in a string format
+      auto now = std::chrono::system_clock::now();
+      auto now_time_t = std::chrono::system_clock::to_time_t(now);
+      now_str = std::ctime(&now_time_t);
+      // Remove the newline character from the end of the string
+      now_str.erase(std::remove(now_str.begin(), now_str.end(), '\n'),
+                    now_str.end());
       visualizer_ = std::make_unique<RerunVisualizer>(
-          base_link_frame_id_, odom_frame_id_, map_frame_id_);
+          base_link_frame_id_, odom_frame_id_, map_frame_id_, now_str);
+      lcd_visualizer_ = std::make_unique<RerunVisualizer>(
+          base_link_frame_id_, odom_frame_id_, map_frame_id_, now_str);
     } else if (viz_type_ == VizType::kRviz) {
       VLOG(1) << "Creating Ros Display.";
       CHECK(vio_params_);
       visualizer_ = std::make_unique<RosVisualizer>(*vio_params_);
+      lcd_visualizer_.reset(new RosLoopClosureVisualizer());
     }
 
     ros_display_ = std::make_unique<RosDisplay>();
   } else {
     ros_display_ = nullptr;
     visualizer_ = nullptr;
+    lcd_visualizer_ = nullptr;
   }
-
-  ros_lcd_visualizer_.reset(new RosLoopClosureVisualizer());
 
   VLOG(1) << "Destroy Vio Pipeline.";
   vio_pipeline_.reset();
@@ -348,10 +353,10 @@ void KimeraVioRos::connectVIO() {
         std::placeholders::_1));
   }
 
-  if (ros_lcd_visualizer_) {
+  if (lcd_visualizer_) {
     vio_pipeline_->registerLcdOutputCallback([&](const auto& msg) {
       if (msg) {
-        ros_lcd_visualizer_->publishLcdOutput(msg);
+        lcd_visualizer_->publishLcdOutput(msg);
       }
     });
   }

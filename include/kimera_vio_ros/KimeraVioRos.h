@@ -69,7 +69,7 @@ class KimeraVioRos {
   VizType viz_type_;
   RosDisplay::UniquePtr ros_display_;
   Visualizer3D::UniquePtr visualizer_;
-  RosLoopClosureVisualizer::Ptr ros_lcd_visualizer_;
+  LoopClosureVisualizer::UniquePtr lcd_visualizer_;
 
   //! ROS Services
   ros::ServiceServer restart_vio_pipeline_srv_;

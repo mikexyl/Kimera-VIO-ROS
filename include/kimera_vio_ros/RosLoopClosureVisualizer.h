@@ -11,34 +11,31 @@
 
 #define PCL_NO_PRECOMPILE  // Define this before you include any PCL headers
                            // to include the templated algorithms
-#include <pcl/point_types.h>
-#include <pcl_ros/point_cloud.h>
-
-#include <opencv2/opencv.hpp>
-
 #include <glog/logging.h>
-
-#include <ros/ros.h>
-#include <tf/transform_broadcaster.h>
-
-#include <pose_graph_tools_msgs/PoseGraph.h>
-#include <pose_graph_tools_msgs/PoseGraphEdge.h>
-#include <pose_graph_tools_msgs/PoseGraphNode.h>
-#include <pose_graph_tools_msgs/VLCFrameQuery.h>
-#include <pose_graph_tools_msgs/VLCFrames.h>
-#include <pose_graph_tools_msgs/BowQueries.h>
-
 #include <kimera-vio/backend/VioBackend-definitions.h>
 #include <kimera-vio/frontend/StereoVisionImuFrontend-definitions.h>
 #include <kimera-vio/loopclosure/LoopClosureDetector-definitions.h>
 #include <kimera-vio/loopclosure/LoopClosureDetector.h>
 #include <kimera-vio/mesh/Mesher-definitions.h>
+#include <pcl/point_types.h>
+#include <pcl_ros/point_cloud.h>
+#include <pose_graph_tools_msgs/BowQueries.h>
+#include <pose_graph_tools_msgs/PoseGraph.h>
+#include <pose_graph_tools_msgs/PoseGraphEdge.h>
+#include <pose_graph_tools_msgs/PoseGraphNode.h>
+#include <pose_graph_tools_msgs/VLCFrameQuery.h>
+#include <pose_graph_tools_msgs/VLCFrames.h>
+#include <ros/ros.h>
+#include <tf/transform_broadcaster.h>
 
+#include <opencv2/opencv.hpp>
+
+#include "kimera_vio_ros/LoopClosureVisualizer.h"
 #include "kimera_vio_ros/RosPublishers.h"
 
 namespace VIO {
 
-class RosLoopClosureVisualizer {
+class RosLoopClosureVisualizer : public LoopClosureVisualizer {
  public:
   KIMERA_POINTER_TYPEDEFS(RosLoopClosureVisualizer);
   KIMERA_DELETE_COPY_CONSTRUCTORS(RosLoopClosureVisualizer);
@@ -47,7 +44,7 @@ class RosLoopClosureVisualizer {
   RosLoopClosureVisualizer();
   ~RosLoopClosureVisualizer() = default;
 
-  void publishLcdOutput(const LcdOutput::ConstPtr& lcd_output);
+  void publishLcdOutput(const LcdOutput::ConstPtr& lcd_output) override;
 
  private:
   void publishTf(const LcdOutput::ConstPtr& lcd_output);
@@ -68,7 +65,7 @@ class RosLoopClosureVisualizer {
   void processBowQuery();
 
   // Timer to periodically publish BoW vectors
-  void publishTimerCallback(const ros::TimerEvent &event);
+  void publishTimerCallback(const ros::TimerEvent& event);
 
   // Service callback to send VLCFrame
   bool VLCServiceCallback(
