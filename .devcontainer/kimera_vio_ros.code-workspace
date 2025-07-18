@@ -7,31 +7,13 @@
 			"path": "../../Kimera-VIO"
 		},
 		{
-			"path": "../../aria"
-		},
-		{
 			"path": ".."
 		},
 		{
-			"path": "../../vio-factors"
+			"path": "../../Kimera-RPGO"
 		},
 		{
-			"path": "../../gtsam"
-		},
-		{
-			"path": "../../accelerated_features"
-		},
-		{
-			"path": "../../VLAD-BuFF"
-		},
-		{
-			"path": "../../../.pixi"
-		},
-		{
-			"path": "../../onnxruntime-linux-x64-gpu-1.22.0"
-		},
-		{
-			"path": "../../faiss"
+			"path": "../../../../home/mikexyl/.ros"
 		}
 	],
 	"settings": {}

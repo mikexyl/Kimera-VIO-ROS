@@ -141,7 +141,7 @@ bool KimeraVioRos::runKimeraVio() {
   data_provider_.reset();
 
   std::unique_ptr<PreloadedVocab> preloaded_vocab;
-  if (FLAGS_use_lcd) {
+  if (FLAGS_use_lcd == 1) {  // only load if use lcd =1, i.e. BoW
     preloaded_vocab.reset(new PreloadedVocab());
   }
 

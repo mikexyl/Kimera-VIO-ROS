@@ -6,33 +6,31 @@
 
 #include "kimera_vio_ros/RosLoopClosureVisualizer.h"
 
-#include <string>
-
-#include <glog/logging.h>
-
 #include <cv_bridge/cv_bridge.h>
 #include <geometry_msgs/TransformStamped.h>
+#include <glog/logging.h>
+#include <kimera-vio/loopclosure/LoopClosureDetector-definitions.h>
+#include <kimera-vio/pipeline/QueueSynchronizer.h>
 #include <nav_msgs/Odometry.h>
 #include <nav_msgs/Path.h>
-#include <ros/ros.h>
 #include <ros/console.h>
+#include <ros/ros.h>
 #include <std_msgs/Float64MultiArray.h>
 #include <tf/transform_broadcaster.h>
 #include <tf2/buffer_core.h>
 
-#include <kimera-vio/loopclosure/LoopClosureDetector-definitions.h>
-#include <kimera-vio/pipeline/QueueSynchronizer.h>
+#include <string>
 
 #include "kimera_vio_ros/utils/UtilsRos.h"
 
 namespace VIO {
 
-RosLoopClosureVisualizer::RosLoopClosureVisualizer() : 
-  nh_(), 
-  nh_private_("~"),
-  bow_batch_size_(5),
-  bow_skip_num_(1),
-  publish_vlc_frames_(true) {
+RosLoopClosureVisualizer::RosLoopClosureVisualizer()
+    : nh_(),
+      nh_private_("~"),
+      bow_batch_size_(5),
+      bow_skip_num_(1),
+      publish_vlc_frames_(true) {
   // Get ROS params
   CHECK(nh_private_.getParam("odom_frame_id", odom_frame_id_));
   CHECK(!odom_frame_id_.empty());
@@ -73,9 +71,10 @@ RosLoopClosureVisualizer::RosLoopClosureVisualizer() :
     bow_queries_[robot_id] = msg;
   }
 
-  publish_timer_ = nh_.createTimer(ros::Duration(1.0),
-                                   &RosLoopClosureVisualizer::publishTimerCallback,
-                                   this);
+  publish_timer_ =
+      nh_.createTimer(ros::Duration(1.0),
+                      &RosLoopClosureVisualizer::publishTimerCallback,
+                      this);
 
   new_frames_msg_.destination_robot_id = robot_id_;
 }
@@ -340,7 +339,7 @@ void RosLoopClosureVisualizer::publishPoseGraph(
         pose_graph_nodes_.at(pose_graph_nodes_.size() - 2));
     incremental_graph.nodes.push_back(
         pose_graph_nodes_.at(pose_graph_nodes_.size() - 1));
-    if (lcd_output->is_loop_closure_) {
+    if (lcd_output->lcd_status_ == LCDStatus::LOOP_DETECTED) {
       // Not directly taking the last lc_edge to bypass kimera-rpgo
       gtsam::Pose3 lc_transform = lcd_output->relative_pose_;
       pose_graph_tools_msgs::PoseGraphEdge last_lc_edge;
@@ -387,11 +386,9 @@ void RosLoopClosureVisualizer::publishTf(
 }
 
 void RosLoopClosureVisualizer::processBowQuery() {
-  if (frames_.size() == 0) 
-    return;
+  if (frames_.size() == 0) return;
   size_t pose_id = frames_.size() - 1;
-  if (pose_id % bow_skip_num_ != 0)
-    return;
+  if (pose_id % bow_skip_num_ != 0) return;
 
   pose_graph_tools_msgs::BowVector bow_vec_msg;
   for (auto it = frames_.back().bow_vec_.begin();
@@ -409,7 +406,8 @@ void RosLoopClosureVisualizer::processBowQuery() {
   }
 }
 
-void RosLoopClosureVisualizer::publishTimerCallback(const ros::TimerEvent& event) {
+void RosLoopClosureVisualizer::publishTimerCallback(
+    const ros::TimerEvent& event) {
   // Publish new BoW vectors to myself
   // This won't incur any real communication
   if (bow_queries_[robot_id_].queries.size() >= bow_batch_size_) {
@@ -428,7 +426,9 @@ void RosLoopClosureVisualizer::publishTimerCallback(const ros::TimerEvent& event
   }
 
   if (selected_batch_size >= bow_batch_size_) {
-    ROS_INFO("Published %zu BoW vectors to robot %hu.", selected_batch_size, selected_robot_id);
+    ROS_INFO("Published %zu BoW vectors to robot %hu.",
+             selected_batch_size,
+             selected_robot_id);
     bow_query_pub_.publish(bow_queries_[selected_robot_id]);
     bow_queries_[selected_robot_id].queries.clear();
   }

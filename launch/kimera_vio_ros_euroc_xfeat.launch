@@ -24,7 +24,7 @@
   <rosparam param="gt_gyro_bias"> [-0.002229, 0.0207, 0.07635] </rosparam>
   <rosparam param="gt_accel_bias"> [-0.012492, 0.547666, 0.069073] </rosparam>
 
-  <arg name="use_lcd"           default="true"/>
+  <arg name="use_lcd"           default="2"/>
   <arg name="use_external_odom" default="false"/>
   <arg name="visualize"         default="true"/>
 

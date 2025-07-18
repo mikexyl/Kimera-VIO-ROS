@@ -1,6 +1,7 @@
 #pragma once
 
 #include <aria_viz/visualizer_rerun.h>
+#include <gtsam/slam/dataset.h>
 #include <kimera-vio/loopclosure/LoopClosureDetector-definitions.h>
 #include <kimera-vio/loopclosure/LoopClosureDetector.h>
 #include <kimera-vio/visualizer/Visualizer3D.h>
@@ -106,7 +107,7 @@ class RerunVisualizer : public Visualizer3D,
     this->drawTf(map_ / odom_, lcd_output->Map_Pose_Odom_, 0.3, false);
 
     CHECK(lcd_output);
-    if (lcd_output->is_loop_closure_) {
+    if (lcd_output->lcd_status_ == LCDStatus::LOOP_DETECTED) {
       std::string message =
           fmt::format("Loop closure detected: match id {}, recent id {} ",
                       lcd_output->id_match_,
@@ -114,6 +115,19 @@ class RerunVisualizer : public Visualizer3D,
       this->rec()->log(
           "lcd_log",
           rerun::TextLog(message).with_level(rerun::TextLogLevel::Info));
+
+      // save nfg to file
+      gtsam::writeG2o(lcd_output->nfg_,
+                      lcd_output->states_,
+                      fmt::format("lcd_{}.g2o", lcd_output->timestamp_));
+
+    } else {
+      std::string message =
+          fmt::format("No loop closure detected: status {}",
+                      LoopResult::asString(lcd_output->lcd_status_));
+      this->rec()->log(
+          "lcd_log",
+          rerun::TextLog(message).with_level(rerun::TextLogLevel::Warning));
     }
 
     auto opt_traj = lcd_output->states_;
