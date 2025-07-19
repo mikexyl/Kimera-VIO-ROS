@@ -43,6 +43,7 @@ cs_add_library(${PROJECT_NAME}
   src/RosOnlineDataProvider.cpp
   src/RosDisplay.cpp
   src/RosVisualizer.cpp
+  src/RerunVisualizer.cpp
   src/RosLoopClosureVisualizer.cpp
   src/LcdRegistrationServer.cpp
   src/utils/UtilsRos.cpp

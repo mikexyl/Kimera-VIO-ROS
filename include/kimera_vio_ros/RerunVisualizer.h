@@ -10,6 +10,69 @@
 
 namespace VIO {
 
+// Alias for the custom log handler signature
+using GlogHandler = std::function<void(google::LogSeverity severity,
+                                       const char* filename,
+                                       int line,
+                                       const char* message)>;
+
+// Custom sink that forwards glog messages to the user-provided handler
+class CustomLogSink : public google::LogSink {
+ public:
+  explicit CustomLogSink(GlogHandler handler) : handler_(std::move(handler)) {}
+
+  void send(google::LogSeverity severity,
+            const char* full_filename,
+            const char* base_filename,
+            int line,
+            const struct tm* tm_time,
+            const char* message,
+            size_t message_len) override {
+    // Build message string and forward to custom handler
+    std::string msg(message, message_len);
+    handler_(severity, base_filename, line, msg.c_str());
+  }
+
+ private:
+  GlogHandler handler_;
+};
+
+// -----------------------------------------------------------------------------
+// Redirect std::cout to glog at INFO level by installing a custom streambuf
+// -----------------------------------------------------------------------------
+class GlogStreamBuf : public std::streambuf {
+ public:
+  GlogStreamBuf() { setp(buffer_, buffer_ + sizeof(buffer_) - 1); }
+
+ protected:
+  int_type overflow(int_type ch) override {
+    if (ch != traits_type::eof()) {
+      *pptr() = static_cast<char>(ch);
+      pbump(1);
+    }
+    if (ch == '\n' || pptr() >= epptr()) {
+      flushBuffer();
+    }
+    return ch;
+  }
+
+  int sync() override {
+    flushBuffer();
+    return 0;
+  }
+
+ private:
+  void flushBuffer() {
+    std::ptrdiff_t len = pptr() - pbase();
+    if (len <= 0) return;
+    std::string msg(pbase(), len);
+    LOG(INFO) << msg;
+    pbump(-len);
+  }
+
+  char buffer_[1024];
+};
+
 class RerunVisualizer : public Visualizer3D,
                         aria::viz::VisualizerRerun,
                         public LoopClosureVisualizer {
@@ -28,9 +91,92 @@ class RerunVisualizer : public Visualizer3D,
         odom_(odom_frame_id) {
     // draw the origin frame for visualization
     this->drawTf(map_, Pose3::Identity(), 0.3, true);
+
+    if (not g_custom_sink) {
+      AddGlogCustomSink([this](google::LogSeverity severity,
+                               const char* filename,
+                               int line,
+                               const char* message) {
+        logGlogMessages(severity, filename, line, message);
+      });
+      RedirectStdCoutToGlog();
+    }
   }
 
   virtual ~RerunVisualizer() = default;
+
+  // Hold the active custom sink so it persists for the program lifetime.
+  static std::unique_ptr<CustomLogSink> g_custom_sink;
+
+  // Call this after google::InitGoogleLogging(), to attach your custom handler
+  // in addition to glog's default sinks (stderr and/or log files).
+  inline void AddGlogCustomSink(GlogHandler handler) {
+    // Remove previous custom sink if installed
+    if (g_custom_sink) {
+      google::RemoveLogSink(g_custom_sink.get());
+      g_custom_sink.reset();
+    }
+
+    // Create and install a new sink; default sinks remain active
+    g_custom_sink = std::make_unique<CustomLogSink>(std::move(handler));
+    google::AddLogSink(g_custom_sink.get());
+  }
+
+  // Preserve original buffer so we can restore cout
+  static std::streambuf* g_original_cout_buf_;
+  static GlogStreamBuf g_glog_streambuf_;
+
+  // Call after InitGoogleLogging() to capture std::cout output
+  inline void RedirectStdCoutToGlog() {
+    if (!g_original_cout_buf_) {
+      g_original_cout_buf_ = std::cout.rdbuf(&g_glog_streambuf_);
+    }
+  }
+
+  // Restore original std::cout behavior
+  inline void RestoreStdCout() {
+    if (g_original_cout_buf_) {
+      std::cout.rdbuf(g_original_cout_buf_);
+      g_original_cout_buf_ = nullptr;
+    }
+  }
+
+  // Optional: remove the custom sink
+  inline void RemoveGlogCustomSink() {
+    if (g_custom_sink) {
+      google::RemoveLogSink(g_custom_sink.get());
+      g_custom_sink.reset();
+    }
+  }
+
+  void logGlogMessages(google::LogSeverity severity,
+                       const char* filename,
+                       int line,
+                       const char* message) {
+    // glog severity to Rerun log level
+    rerun::TextLogLevel level;
+    switch (severity) {
+      case google::GLOG_INFO:
+        level = rerun::TextLogLevel::Info;
+        break;
+      case google::GLOG_WARNING:
+        level = rerun::TextLogLevel::Warning;
+        break;
+      case google::GLOG_ERROR:
+        level = rerun::TextLogLevel::Error;
+        break;
+      case google::GLOG_FATAL:
+        level = rerun::TextLogLevel::Critical;
+        break;
+      default:
+        level = rerun::TextLogLevel::Debug;  // Default to Debug for other
+                                             // severities
+    }
+
+    // Forward glog messages to Rerun
+    this->rec()->log(
+        "glog", rerun::TextLog(fmt::format("{}", message)).with_level(level));
+  }
 
   VIO::VisualizerOutput::UniquePtr spinOnce(
       const VIO::VisualizerInput& input) override {
@@ -106,12 +252,23 @@ class RerunVisualizer : public Visualizer3D,
     this->setTimeNSec(lcd_output->timestamp_);
     this->drawTf(map_ / odom_, lcd_output->Map_Pose_Odom_, 0.3, false);
 
+    auto pose3ToString = [](const Pose3& pose) {
+      return fmt::format("Pose3({}, {}, {}, {}, {}, {})",
+                         pose.x(),
+                         pose.y(),
+                         pose.z(),
+                         pose.rotation().rpy()[0],
+                         pose.rotation().rpy()[1],
+                         pose.rotation().rpy()[2]);
+    };
+
     CHECK(lcd_output);
     if (lcd_output->lcd_status_ == LCDStatus::LOOP_DETECTED) {
       std::string message =
-          fmt::format("Loop closure detected: match id {}, recent id {} ",
+          fmt::format("Loop closure detected: {} -> {}: {}",
                       lcd_output->id_match_,
-                      lcd_output->id_recent_);
+                      lcd_output->id_recent_,
+                      pose3ToString(lcd_output->relative_pose_));
       this->rec()->log(
           "lcd_log",
           rerun::TextLog(message).with_level(rerun::TextLogLevel::Info));
