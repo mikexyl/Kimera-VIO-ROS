@@ -250,7 +250,8 @@ class RerunVisualizer : public Visualizer3D,
     std::lock_guard<std::mutex> lock(rerun_mutex_);
 
     this->setTimeNSec(lcd_output->timestamp_);
-    this->drawTf(map_ / odom_, lcd_output->Map_Pose_Odom_, 0.3, false);
+    this->drawTf(
+        map_ / odom_, lcd_output->Map_Pose_Odom_, 0.3, false);
 
     auto pose3ToString = [](const Pose3& pose) {
       return fmt::format("Pose3({}, {}, {}, {}, {}, {})",

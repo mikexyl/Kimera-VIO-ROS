@@ -11,6 +11,8 @@ scripts = ["/opt/ros/noetic/setup.sh", "devel/setup.sh"]
 [activation.env]
 # LD_LIBRARY_PATH = "$LD_LIBRARY_PATH:/usr/local/lib:${PIXI_PROJECT_ROOT}/.pixi/envs/${PIXI_ENVIRONMENT_NAME}/lib"
 FAISS_CMAKE_ARGS = "-DFAISS_ENABLE_GPU=ON -DFAISS_ENABLE_PYTHON=ON -DFAISS_ENABLE_CUVS=ON -Dcuvs_DIR=/workspaces/.pixi/envs/default/lib/cmake/cuvs -DBUILD_TESTING=OFF"
+LIBGL_ALWAYS_SOFTWARE = "1"
+
 
 [tasks]
 clone-src = { cmd = "mkdir -p src && git clone git@github.com:MIT-SPARK/Kimera-VIO-ROS.git src/Kimera-VIO-ROS && vcs import src < src/Kimera-VIO-ROS/install/kimera_vio_ros_ssh.rosinstall" }
@@ -25,24 +27,39 @@ config = { cmd = [
   "-DCMAKE_CXX_COMPILER_LAUNCHER=ccache",
   "-DCMAKE_C_COMPILER=gcc",
   "-DCMAKE_CXX_COMPILER=g++",
+  "-DKIMERA_BUILD_TESTS=OFF",
   "-Donnxruntime_DIR=/workspaces/src/onnxruntime-linux-x64-gpu-1.22.0",
   "-DCUBLAS_DIR=/usr/local/cuda",
   "-Dfaiss_DIR=/workspaces/src/faiss/build",
 ] }
-build-gtsam = { cmd = "cd src/gtsam && mkdir -p build && cd build && cmake -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Release -DGTSAM_USE_SYSTEM_METIS=ON -DGTSAM_BUILD_UNSTABLE=ON -DGTSAM_USE_SYSTEM_EIGEN=ON -DGTSAM_POSE3_EXPMAP=ON -DGTSAM_ROT3_EXPMAP=ON -DGTSAM_TANGENT_PREINTEGRATION=OFF -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja -DGTSAM_BUILD_TESTS=OFF -DGTSAM_BUILD_EXAMPLES_ALWAYS=OFF .. && ninja && sudo ninja install" }
+build-gtsam = { cmd = "cd src/gtsam && mkdir -p build && cd build && cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=1 -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Release -DGTSAM_USE_SYSTEM_METIS=ON -DGTSAM_BUILD_UNSTABLE=ON -DGTSAM_USE_SYSTEM_EIGEN=ON -DGTSAM_POSE3_EXPMAP=ON -DGTSAM_ROT3_EXPMAP=ON -DGTSAM_TANGENT_PREINTEGRATION=OFF -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja -DGTSAM_BUILD_TESTS=OFF -DGTSAM_BUILD_EXAMPLES_ALWAYS=OFF .. && ninja && sudo ninja install" }
 clean-ws = { cmd = "catkin clean -y" }
 rviz = { cmd = "rviz" }
 roscore = { cmd = "roscore" }
 rqt = { cmd = "rqt --force-discover" }
 kmr-rviz = { cmd = "rviz -d $(rospack find kimera_vio_ros)/rviz/kimera_vio_euroc.rviz" }
-kmr-euroc = { cmd = "roslaunch kimera_vio_ros kimera_vio_ros_euroc.launch online:=true verbosity:={{ v }}", args = [
-  "v",
-] }
-download-rerun = { cmd = "cd src && wget https://github.com/rerun-io/rerun/releases/download/0.23.3/rerun_cpp_sdk.zip && unzip rerun_cpp_sdk.zip && rm rerun_cpp_sdk.zip" }
+download-rerun = { cmd = "cd src && wget https://github.com/rerun-io/rerun/releases/download/0.24.0/rerun_cpp_sdk.zip && unzip rerun_cpp_sdk.zip && rm rerun_cpp_sdk.zip" }
 build-kmr = { cmd = "catkin build kimera_vio kimera_vio_ros" }
-play-euroc = { cmd = "cd /datasets/euroc && rosbag play --clock -s 25 MH_01_easy.bag" }
+play-euroc = { cmd = "cd /datasets/euroc && rosbag play --clock -s 30 MH_02_easy.bag" }
+play-jackal = { cmd = "cd /datasets && rosbag play --clock -s 20 10_14_acl_jackal.bag" }
 download-onnx = { cmd = "wget https://codeload.github.com/microsoft/onnxruntime/zip/refs/tags/v1.22.0" }
 jupyter = { cmd = "jupyter lab" }
+
+[tasks.kmr-euroc]
+cmd = "roslaunch kimera_vio_ros kimera_vio_ros_euroc{{ method }}.launch online:=true verbosity:={{ v }} debug:={{ debug }}"
+args = [
+  { "arg" = "method", "default" = "" },
+  { "arg" = "v", "default" = "0" },
+  { "arg" = "debug", "default" = "false" },
+]
+
+[tasks.kmr-jackal]
+cmd = "roslaunch kimera_vio_ros kimera_vio_d455_xfeat.launch online:=true verbosity:={{ v }} robot_name:={{ robot }} camera_name:=forward"
+args = [
+  { "arg" = "v", "default" = "0" },
+  { "arg" = "robot", "default" = "acl_jackal" },
+]
+
 
 
 [tasks.xfeat-example]
@@ -64,8 +81,8 @@ cmd = ["echo 'Built Kimera VIO ROS workspace.'"]
 [tasks.export-lg]
 args = [
   { "arg" = "width", "default" = "640" },
-  { "arg" = "height", "default" = "352" },
-  { "arg" = "top_k", "default" = "1000" },
+  { "arg" = "height", "default" = "480" },
+  { "arg" = "top_k", "default" = "2000" },
 ]
 cmd = [
   "cd",
@@ -120,6 +137,10 @@ cmd = [
 [dependencies]
 cmake = "<4"
 swig = ">=4.3.1,<5"
+pip = ">=25.1.1,<26"
+onnxruntime = ">=1.22.0,<2"
+tqdm = ">=4.67.1,<5"
+
 
 [system-requirements]
 cuda = "12"

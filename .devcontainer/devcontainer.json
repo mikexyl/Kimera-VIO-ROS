@@ -61,7 +61,9 @@
 				"mutantdino.resourcemonitor",
 				"tamasfe.even-better-toml",
 				"ms-toolsai.jupyter",
-				"yzhang.markdown-all-in-one"
+				"yzhang.markdown-all-in-one",
+				"redhat.vscode-xml",
+				"DotJoshJohnson.xml"
 			]
 		}
 	}

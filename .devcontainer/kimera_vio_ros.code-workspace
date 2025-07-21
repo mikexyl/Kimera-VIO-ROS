@@ -13,7 +13,16 @@
 			"path": "../../Kimera-RPGO"
 		},
 		{
-			"path": "../../../../home/mikexyl/.ros"
+			"path": "../../xfeat-cpp-ros"
+		},
+		{
+			"path": "../../aria/aria_viz"
+		},
+		{
+			"path": "../../gtsam"
+		},
+		{
+			"path": "../../accelerated_features"
 		}
 	],
 	"settings": {}
