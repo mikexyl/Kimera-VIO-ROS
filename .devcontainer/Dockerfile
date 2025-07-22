@@ -18,6 +18,7 @@ RUN --mount=type=cache,target=/var/cache/apt \
     ros-$ROS_DISTRO-rqt-tf-tree \
     ros-$ROS_DISTRO-image-pipeline \
     libspdlog-dev libgraphviz-dev kitty \
+    libsuitesparse-dev \
     libmetis-dev libgflags-dev libgoogle-glog-dev googletest \
     python3-catkin-tools libmkl-dev libcublas-dev libblas-dev && \
     apt-get clean && \

@@ -19,10 +19,22 @@
 			"path": "../../aria/aria_viz"
 		},
 		{
-			"path": "../../gtsam"
+			"path": "../../accelerated_features"
 		},
 		{
-			"path": "../../accelerated_features"
+			"path": "../../kimera_xfeat_docker"
+		},
+		{
+			"path": "../../Kimera-Multi-LCD"
+		},
+		{
+			"path": "../../vio-factors"
+		},
+		{
+			"path": "../../Kimera-Distributed"
+		},
+		{
+			"path": "../../gtsam"
 		}
 	],
 	"settings": {}

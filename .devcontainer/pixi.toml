@@ -54,9 +54,10 @@ args = [
 ]
 
 [tasks.kmr-jackal]
-cmd = "roslaunch kimera_vio_ros kimera_vio_d455_xfeat.launch online:=true verbosity:={{ v }} robot_name:={{ robot }} camera_name:=forward"
+cmd = "roslaunch kimera_vio_ros kimera_vio_d455_xfeat.launch online:=true verbosity:={{ v }} robot_name:={{ robot }} camera_name:=forward debug:={{ debug }}"
 args = [
   { "arg" = "v", "default" = "0" },
+  { "arg" = "debug", "default" = "0" },
   { "arg" = "robot", "default" = "acl_jackal" },
 ]
 
@@ -140,6 +141,10 @@ swig = ">=4.3.1,<5"
 pip = ">=25.1.1,<26"
 onnxruntime = ">=1.22.0,<2"
 tqdm = ">=4.67.1,<5"
+empy = ">=3.3.4,<4"
+catkin_pkg = ">=1.0.0,<2"
+yaml = ">=0.2.5,<0.3"
+pyyaml = ">=6.0.2,<7"
 
 
 [system-requirements]
