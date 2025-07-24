@@ -1,10 +1,10 @@
 <launch>
-  <arg name="robot_name" default="robot0" />
-  <arg name="camera_name" default="camera"/>
+  <arg name="robot_name" default="Alpha" />
+  <arg name="camera_name" default="left_camera"/>
   <arg name="online" default="false" />
-  <arg name="log_output" default="true"/>
+  <arg name="log_output" default="false"/>
   <arg name="rosbag_path" default="path" />
-  <arg name="config_type" default="D455MonoXfeat" />
+  <arg name="config_type" default="S3EAlphaMonoXfeat" />
   <arg name="robot_id" default="0" />
   <param name="use_sim_time" value="true"/>
   <arg name="debug" default="0" />
@@ -25,9 +25,9 @@
   <arg if="$(arg log_output)" name="log_output_path" value="$(find kimera_vio_ros)/output_logs/$(arg config_type)"/>
 
   <!-- Subscribed Topics -->
-  <arg name="left_cam_topic" value="/$(arg robot_name)/$(arg camera_name)/infra1/image_rect_raw"/>
-  <arg name="right_cam_topic" value="/$(arg robot_name)/$(arg camera_name)/infra2/image_rect_raw"/>
-  <arg name="imu_topic"  value="/$(arg robot_name)/$(arg camera_name)/imu"/>
+  <arg name="left_cam_topic" value="/$(arg robot_name)/$(arg camera_name)"/>
+  <arg name="right_cam_topic" value="/$(arg robot_name)/$(arg camera_name)"/>
+  <arg name="imu_topic"  value="/$(arg robot_name)/imu/data"/>
   <!-- Only used when parsing a rosbag -->
   <arg name="external_odom_topic" value="/$(arg robot_name)/jackal_velocity_controller/odom"/>
 

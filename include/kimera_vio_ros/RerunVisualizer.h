@@ -184,14 +184,14 @@ class RerunVisualizer : public Visualizer3D,
     this->setTimeNSec(input.timestamp_);
     this->drawTf(map_ / odom_ / baselink_,
                  input.backend_output_->W_State_Blkf_.pose_,
-                 0.3,
+                 1.0,
                  false);
 
     odom_traj_.push_back(input.backend_output_->W_State_Blkf_.pose_);
     this->drawTrajectory(map_ / odom_ / "trajectory",
                          odom_traj_,
                          aria::viz::ColorMap::kGreen,
-                         0.5f,
+                         1.f,
                          false);
 
     cv::Mat tracking_image_clone =
@@ -250,8 +250,7 @@ class RerunVisualizer : public Visualizer3D,
     std::lock_guard<std::mutex> lock(rerun_mutex_);
 
     this->setTimeNSec(lcd_output->timestamp_);
-    this->drawTf(
-        map_ / odom_, lcd_output->Map_Pose_Odom_, 0.3, false);
+    this->drawTf(map_ / odom_, lcd_output->Map_Pose_Odom_, 0.3, false);
 
     auto pose3ToString = [](const Pose3& pose) {
       return fmt::format("Pose3({}, {}, {}, {}, {}, {})",
@@ -294,7 +293,7 @@ class RerunVisualizer : public Visualizer3D,
                         lcd_output->nfg_,
                         lcd_output->states_,
                         {aria::viz::ColorMap::kBlue},
-                        0.5f,
+                        1.f,
                         false);
     }
   }
