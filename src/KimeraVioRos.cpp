@@ -104,21 +104,28 @@ bool KimeraVioRos::runKimeraVio() {
       CHECK(!odom_frame_id_.empty());
       CHECK(nh_private_.getParam("map_frame_id", map_frame_id_));
       CHECK(!map_frame_id_.empty());
+      std::string gt_csv_file;
+      CHECK(nh_private_.getParam("gt_csv_file", gt_csv_file));
+      CHECK(!gt_csv_file.empty());
 
       VLOG(1) << "Creating Rerun Display.";
       CHECK(vio_params_);
-      std::string now_str;
-      // Get the current time in a string format
       auto now = std::chrono::system_clock::now();
-      auto now_time_t = std::chrono::system_clock::to_time_t(now);
-      now_str = std::ctime(&now_time_t);
-      // Remove the newline character from the end of the string
-      now_str.erase(std::remove(now_str.begin(), now_str.end(), '\n'),
-                    now_str.end());
-      visualizer_ = std::make_unique<RerunVisualizer>(
-          base_link_frame_id_, odom_frame_id_, map_frame_id_, now_str);
-      lcd_visualizer_ = std::make_unique<RerunVisualizer>(
-          base_link_frame_id_, odom_frame_id_, map_frame_id_, now_str);
+      std::time_t now_time_t = std::chrono::system_clock::to_time_t(now);
+      std::tm tm_local = *std::localtime(&now_time_t);
+
+      std::ostringstream oss;
+      oss << std::put_time(&tm_local, "%Y-%m-%d-%H-%M-%S");
+      std::string now_str = oss.str();
+
+      RerunVisualizer::Params params{.base_link_frame_id = base_link_frame_id_,
+                                     .odom_frame_id = odom_frame_id_,
+                                     .map_frame_id = map_frame_id_,
+                                     .gt_csv_file = gt_csv_file,
+                                     .recording_id = now_str};
+
+      visualizer_ = std::make_unique<RerunVisualizer>(params);
+      lcd_visualizer_ = std::make_unique<RerunVisualizer>(params);
     } else if (viz_type_ == VizType::kRviz) {
       VLOG(1) << "Creating Ros Display.";
       CHECK(vio_params_);

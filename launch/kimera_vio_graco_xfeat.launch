@@ -4,6 +4,8 @@
   <arg name="log_output" default="false"/>
   <arg name="rosbag_path" default="path" />
   <arg name="config_type" default="GrAcoMonoXfeat" />
+  <arg name="run_name" default="aerial-05-40m"/>
+  <arg name="gt_csv_file" default="/datasets/graco/$(arg run_name).csv"/>
   <arg name="robot_id" default="0" />
   <param name="use_sim_time" value="true"/>
   <arg name="debug" default="0" />
@@ -26,7 +28,7 @@
   <!-- Subscribed Topics -->
   <arg name="left_cam_topic" value="/$(arg camera_name)/image_raw"/>
   <arg name="right_cam_topic" value="/$(arg camera_name)/image_raw"/>
-  <arg name="imu_topic"  value="/gnss/imu" />
+  <arg name="imu_topic" value="/gnss/imu" />
   <!-- Only used when parsing a rosbag -->
   <arg name="external_odom_topic" value="/jackal_velocity_controller/odom"/>
 
@@ -36,7 +38,6 @@
   </node>
 
   <!-- Launch actual pipeline -->
-  <include file="$(find kimera_vio_ros)/launch/kimera_vio_ros.launch"
-    pass_all_args="true"/>
+  <include file="$(find kimera_vio_ros)/launch/kimera_vio_ros.launch" pass_all_args="true"/>
 
 </launch>

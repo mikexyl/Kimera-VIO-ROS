@@ -8,6 +8,8 @@
 #include <kimera_vio_ros/LoopClosureVisualizer.h>
 #include <spdlog/fmt/fmt.h>
 
+#include <future>
+
 namespace VIO {
 
 // Alias for the custom log handler signature
@@ -77,9 +79,25 @@ class RerunVisualizer : public Visualizer3D,
                         aria::viz::VisualizerRerun,
                         public LoopClosureVisualizer {
  public:
+  struct Params {
+    std::string base_link_frame_id = "baselink";
+    std::string odom_frame_id = "odom";
+    std::string map_frame_id = "map";
+    std::string gt_csv_file = "";
+    std::optional<std::string> recording_id = std::nullopt;
+  };
+
+  RerunVisualizer(const Params& params)
+      : RerunVisualizer(params.base_link_frame_id,
+                        params.odom_frame_id,
+                        params.map_frame_id,
+                        params.gt_csv_file,
+                        params.recording_id) {}
+
   RerunVisualizer(std::string base_link_frame_id = "baselink",
                   std::string odom_frame_id = "odom",
                   std::string map_frame_id = "map",
+                  std::string gt_csv_file = "",
                   std::optional<std::string> recording_id = std::nullopt)
       : VIO::Visualizer3D(VIO::VisualizationType::kNone),
         aria::viz::VisualizerRerun(aria::viz::VisualizerRerun::Params(
@@ -100,6 +118,16 @@ class RerunVisualizer : public Visualizer3D,
         logGlogMessages(severity, filename, line, message);
       });
       RedirectStdCoutToGlog();
+    }
+
+    if (not gt_csv_file.empty()) {
+      gt_trajectory_ = loadTrajectoryMapFromCSV(gt_csv_file);
+      // draw the gt trajectory
+      draw_gt_traj_future_ = std::async(std::launch::async,
+                                        &RerunVisualizer::drawGtTraj,
+                                        this,
+                                        gtsam::Values{},
+                                        FrameIDTimestampMap{});
     }
   }
 
@@ -210,6 +238,54 @@ class RerunVisualizer : public Visualizer3D,
     return std::make_unique<VIO::VisualizerOutput>();
   }
 
+  void drawGtTraj(gtsam::Values est_traj_values,
+                  const FrameIDTimestampMap& timestamp_map) {
+    std::lock_guard<std::mutex> lock(rerun_mutex_);
+    if (not gt_trajectory_.empty()) {
+      if (est_traj_values.size() % 50 == 0) {
+        // extract the poses from the gtsam::Values
+        std::map<FrameId, gtsam::Pose3> est_poses;
+        std::map<FrameId, gtsam::Pose3> gt_poses;
+        for (const auto& key : est_traj_values.keys()) {
+          if (timestamp_map.find(key) != timestamp_map.end()) {
+            Timestamp timestamp = timestamp_map.at(key);
+            // find the closest timestamp in gt_trajectory_
+            auto it = gt_trajectory_.lower_bound(timestamp);
+            if (it != gt_trajectory_.end()) {
+              est_poses[key] = est_traj_values.at<gtsam::Pose3>(key);
+              gt_poses[key] = it->second;
+            }
+          }
+        }
+
+        // align the poses to the map frame
+        gtsam::Point3Pairs poses_to_align;
+        for (const auto& [key, pose] : est_poses) {
+          if (gt_poses.find(key) != gt_poses.end()) {
+            poses_to_align.emplace_back(pose.translation(),
+                                        gt_poses.at(key).translation());
+          }
+        }
+        auto T_est_gt = gtsam::Pose3::Align(poses_to_align);
+        if (T_est_gt) {
+          T_map_gt_ = T_est_gt.value();
+        }
+
+        this->drawTf(map_ / "gt", T_map_gt_, 1.0, false);
+
+        std::vector<gtsam::Pose3> gt_traj;
+        for (const auto& [key, pose] : gt_trajectory_) {
+          gt_traj.push_back(pose);
+        }
+        this->drawTrajectory(map_ / "gt" / "trajectory",
+                             gt_traj,
+                             aria::viz::ColorMap::kGray,
+                             1.f,
+                             false);
+      }
+    }
+  }
+
   void visualizeGraphInSmoother(const VIO::VisualizerInput& input) {
     this->drawPoints(map_ / odom_ / "smoother" / "values",
                      input.backend_output_->state_,
@@ -295,7 +371,67 @@ class RerunVisualizer : public Visualizer3D,
                         {aria::viz::ColorMap::kBlue},
                         1.f,
                         false);
+      if (draw_gt_traj_future_.valid() and
+          draw_gt_traj_future_.wait_for(std::chrono::seconds(0)) ==
+              std::future_status::ready) {
+        draw_gt_traj_future_ = std::async(std::launch::async,
+                                          &RerunVisualizer::drawGtTraj,
+                                          this,
+                                          lcd_output->states_,
+                                          lcd_output->timestamp_map_);
+      }
     }
+  }
+
+  std::map<Timestamp, gtsam::Pose3> loadTrajectoryMapFromCSV(
+      const std::string& filename) {
+    std::map<int64_t, gtsam::Pose3> trajectory;
+    std::ifstream file(filename);
+    if (!file.is_open()) {
+      throw std::runtime_error("Failed to open file: " + filename);
+    }
+
+    std::string line;
+    while (std::getline(file, line)) {
+      if (line.empty()) continue;
+
+      std::istringstream iss(line);
+      std::vector<double> values;
+      std::string token;
+
+      while (std::getline(iss, token, ',')) {
+        try {
+          values.push_back(std::stod(token));
+        } catch (const std::invalid_argument&) {
+          std::cerr << "Invalid number in line: " << line << std::endl;
+          values.clear();
+          break;
+        }
+      }
+
+      if (values.size() != 8) {
+        std::cerr << "Skipping malformed line: " << line << std::endl;
+        continue;
+      }
+
+      // Convert timestamp to int64_t (assume it's in seconds, multiply to get
+      // nanoseconds)
+      int64_t timestamp_ns = static_cast<int64_t>(values[0] * 1e9);
+
+      double x = values[1];
+      double y = values[2];
+      double z = values[3];
+      double qx = values[4];
+      double qy = values[5];
+      double qz = values[6];
+      double qw = values[7];
+
+      gtsam::Rot3 R = gtsam::Rot3::Quaternion(qw, qx, qy, qz);
+      gtsam::Point3 t(x, y, z);
+      trajectory[timestamp_ns] = gtsam::Pose3(R, t);
+    }
+
+    return trajectory;
   }
 
  private:
@@ -304,6 +440,11 @@ class RerunVisualizer : public Visualizer3D,
   std::filesystem::path odom_;
 
   std::vector<Pose3> odom_traj_{};
+
+  std::future<void> draw_gt_traj_future_;
+
+  std::map<Timestamp, Pose3> gt_trajectory_;
+  Pose3 T_map_gt_ = Pose3::Identity();
 
   std::mutex rerun_mutex_;
 };
