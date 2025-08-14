@@ -105,8 +105,7 @@ bool KimeraVioRos::runKimeraVio() {
       CHECK(nh_private_.getParam("map_frame_id", map_frame_id_));
       CHECK(!map_frame_id_.empty());
       std::string gt_csv_file;
-      CHECK(nh_private_.getParam("gt_csv_file", gt_csv_file));
-      CHECK(!gt_csv_file.empty());
+      nh_private_.param("gt_csv_file", gt_csv_file, std::string(""));
 
       VLOG(1) << "Creating Rerun Display.";
       CHECK(vio_params_);

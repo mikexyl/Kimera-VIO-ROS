@@ -9,10 +9,34 @@ version = "0.1.0"
 scripts = ["/opt/ros/noetic/setup.sh", "devel/setup.sh"]
 
 [activation.env]
-# LD_LIBRARY_PATH = "$LD_LIBRARY_PATH:/usr/local/lib:${PIXI_PROJECT_ROOT}/.pixi/envs/${PIXI_ENVIRONMENT_NAME}/lib"
+LD_LIBRARY_PATH = "$LD_LIBRARY_PATH:/usr/lib/x86_64-linux-gnu:/usr/local/lib:${PIXI_PROJECT_ROOT}/.pixi/envs/${PIXI_ENVIRONMENT_NAME}/lib"
 FAISS_CMAKE_ARGS = "-DFAISS_ENABLE_GPU=ON -DFAISS_ENABLE_PYTHON=ON -DFAISS_ENABLE_CUVS=ON -Dcuvs_DIR=/workspaces/.pixi/envs/default/lib/cmake/cuvs -DBUILD_TESTING=OFF"
 LIBGL_ALWAYS_SOFTWARE = "1"
 
+[tasks.build-faiss]
+cwd = "src/faiss"
+cmd = [
+  "cmake",
+  "-B",
+  "build",
+  "-DFAISS_ENABLE_GPU=ON",
+  "-DFAISS_ENABLE_PYTHON=OFF",
+  "-DBUILD_SHARED_LIBS=ON",
+  "-DCMAKE_BUILD_TYPE=Release",
+  "-DCMAKE_INSTALL_PREFIX=/usr/local",
+  "-DBUILD_TESTING=OFF",
+  "-G",
+  "Ninja",
+  "&&",
+  "cmake",
+  "--build",
+  "build",
+  "&&",
+  "sudo",
+  "cmake",
+  "--install",
+  "build",
+]
 
 [tasks]
 clone-src = { cmd = "mkdir -p src && git clone git@github.com:MIT-SPARK/Kimera-VIO-ROS.git src/Kimera-VIO-ROS && vcs import src < src/Kimera-VIO-ROS/install/kimera_vio_ros_ssh.rosinstall" }
@@ -42,13 +66,25 @@ download-rerun = { cmd = "cd src && wget https://github.com/rerun-io/rerun/relea
 build-kmr = { cmd = "catkin build kimera_vio kimera_vio_ros" }
 play-euroc = { cmd = "cd /datasets/euroc && rosbag play --clock -s 30 MH_02_easy.bag" }
 play-jackal = { cmd = "cd /datasets && rosbag play --clock -s 20 10_14_acl_jackal.bag" }
+play-alpha = { cmd = "cd /datasets_extra/S3E/Square2 && rosbag play --clock -s 0 square2.bag" }
+play-graco8 = { cmd = "cd /datasets/graco && rosbag play --clock -s 0 aerial-08-25m.bag" }
+play-graco7 = { cmd = "cd /datasets/graco && rosbag play --clock -s 0 aerial-07-25m.bag" }
+play-hilti01 = { cmd = "cd /datasets_extra/hilti && rosbag play --clock -s 0 exp01_construction_ground_level.bag" }
+play-hilti04 = { cmd = "cd /datasets_extra/hilti && rosbag play --clock -s 0 exp04_construction_upper_level.bag" }
+play-hilti09 = { cmd = "cd /datasets_extra/hilti && rosbag play --clock -s 0 exp09_cupola.bag" }
+play-hilti18 = { cmd = "cd /datasets_extra/hilti && rosbag play --clock -s 0 exp18_corridor_lower_gallery_2.bag" }
+play-fpv-out-fwd1 = { cmd = "cd /datasets_extra/fpv_racing && rosbag play --clock -s 25 outdoor_forward_1_snapdragon_with_gt.bag" }
+play-fpv-out-fwd3 = { cmd = "cd /datasets_extra/fpv_racing && rosbag play --clock -s 25 outdoor_forward_3_snapdragon_with_gt.bag" }
+play-fpv-out-fwd5 = { cmd = "cd /datasets_extra/fpv_racing && rosbag play --clock -s 45 outdoor_forward_5_snapdragon_with_gt.bag" }
+play-fpv-split = { cmd = "cd /datasets_extra/fpv_racing && rosbag play --clock -s 0 race_1.bag" }
+play-tumvi-c4 = { cmd = "cd /datasets_extra/tum_vi/ros && rosbag play --clock -s 0 dataset-corridor4_512_16.bag" }
+play-tumvi-m2 = { cmd = "cd /datasets_extra/tum_vi/ros && rosbag play --clock -s 30 dataset-magistrale2_512_16.bag" }
 download-onnx = { cmd = "wget https://codeload.github.com/microsoft/onnxruntime/zip/refs/tags/v1.22.0" }
 jupyter = { cmd = "jupyter lab" }
 
 [tasks.kmr-euroc]
-cmd = "roslaunch kimera_vio_ros kimera_vio_ros_euroc{{ method }}.launch online:=true verbosity:={{ v }} debug:={{ debug }}"
+cmd = "roslaunch kimera_vio_ros kimera_vio_ros_euroc_xfeat.launch online:=true verbosity:={{ v }} debug:={{ debug }}"
 args = [
-  { "arg" = "method", "default" = "" },
   { "arg" = "v", "default" = "0" },
   { "arg" = "debug", "default" = "false" },
 ]
@@ -61,7 +97,29 @@ args = [
   { "arg" = "robot", "default" = "acl_jackal" },
 ]
 
+[tasks.kmr-alpha]
+cmd = "roslaunch kimera_vio_ros kimera_vio_s3e_alpha_xfeat.launch online:=true verbosity:={{ v }} debug:={{ debug }}"
+args = [{ "arg" = "v", "default" = "0" }, { "arg" = "debug", "default" = "0" }]
 
+[tasks.kmr-graco]
+cmd = "roslaunch kimera_vio_ros kimera_vio_graco_xfeat.launch online:=true verbosity:={{ v }} debug:={{ debug }}"
+args = [{ "arg" = "v", "default" = "0" }, { "arg" = "debug", "default" = "0" }]
+
+[tasks.kmr-hilti]
+cmd = "roslaunch kimera_vio_ros kimera_vio_hilti_xfeat.launch online:=true verbosity:={{ v }} debug:={{ debug }}"
+args = [{ "arg" = "v", "default" = "0" }, { "arg" = "debug", "default" = "0" }]
+
+[tasks.kmr-fpv-out-fwd]
+cmd = "roslaunch kimera_vio_ros kimera_vio_fpv_out_fwd_xfeat.launch online:=true verbosity:={{ v }} debug:={{ debug }}"
+args = [{ "arg" = "v", "default" = "0" }, { "arg" = "debug", "default" = "0" }]
+
+[tasks.kmr-fpv-split]
+cmd = "roslaunch kimera_vio_ros kimera_vio_fpv_split_xfeat.launch online:=true verbosity:={{ v }} debug:={{ debug }}"
+args = [{ "arg" = "v", "default" = "0" }, { "arg" = "debug", "default" = "0" }]
+
+[tasks.kmr-tumvi]
+cmd = "roslaunch kimera_vio_ros kimera_vio_tum_xfeat.launch online:=true verbosity:={{ v }} debug:={{ debug }}"
+args = [{ "arg" = "v", "default" = "0" }, { "arg" = "debug", "default" = "0" }]
 
 [tasks.xfeat-example]
 depends-on = [{ "task" = "build", "args" = ["xfeat-cpp"] }]
@@ -136,15 +194,8 @@ cmd = [
 
 
 [dependencies]
-cmake = "<4"
-swig = ">=4.3.1,<5"
-pip = ">=25.1.1,<26"
-onnxruntime = ">=1.22.0,<2"
-tqdm = ">=4.67.1,<5"
-empy = ">=3.3.4,<4"
-catkin_pkg = ">=1.0.0,<2"
-yaml = ">=0.2.5,<0.3"
-pyyaml = ">=6.0.2,<7"
+# git = "*"
+# cmake = "<4"
 
 
 [system-requirements]

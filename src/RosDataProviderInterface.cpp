@@ -7,17 +7,15 @@
 
 #include "kimera_vio_ros/RosDataProviderInterface.h"
 
-#include <string>
-#include <vector>
-
-#include <glog/logging.h>
-
 #include <cv_bridge/cv_bridge.h>
+#include <glog/logging.h>
+#include <kimera-vio/dataprovider/DataProviderInterface.h>
+#include <kimera-vio/visualizer/Visualizer3D.h>
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/image_encodings.h>
 
-#include <kimera-vio/dataprovider/DataProviderInterface.h>
-#include <kimera-vio/visualizer/Visualizer3D.h>
+#include <string>
+#include <vector>
 
 namespace VIO {
 
@@ -77,11 +75,17 @@ const cv::Mat RosDataProviderInterface::readRosImage(
     VLOG_EVERY_N(1, 10) << "Converting image...";
     cv::cvtColor(img_const, converted_img, cv::COLOR_BGRA2GRAY);
     return converted_img;
+  } else if (img_msg->encoding == sensor_msgs::image_encodings::MONO16) {
+    VLOG_EVERY_N(1, 10) << "Converting MONO16 to MONO8…";
+    // simply drop the low 8 bits:
+    img_const.convertTo(converted_img, CV_8U, 1.0 / 256.0);
+    return converted_img;
   } else {
     CHECK(cv_ptr->encoding == sensor_msgs::image_encodings::MONO8 ||
           cv_ptr->encoding == sensor_msgs::image_encodings::TYPE_8UC1)
         << "Expected image with MONO8, 8UC1, BGR8, or RGB8 encoding."
-           "Add in here more conversions if you wish.";
+           "Add in here more conversions if you wish."
+        << " Encoding: " << img_msg->encoding;
     return img_const;
   }
 }

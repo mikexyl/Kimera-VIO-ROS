@@ -122,12 +122,16 @@ class RerunVisualizer : public Visualizer3D,
 
     if (not gt_csv_file.empty()) {
       gt_trajectory_ = loadTrajectoryMapFromCSV(gt_csv_file);
-      // draw the gt trajectory
-      draw_gt_traj_future_ = std::async(std::launch::async,
-                                        &RerunVisualizer::drawGtTraj,
-                                        this,
-                                        gtsam::Values{},
-                                        FrameIDTimestampMap{});
+      std::vector<gtsam::Pose3> gt_traj;
+      for (const auto& [key, pose] : gt_trajectory_) {
+        gt_traj.push_back(pose);
+      }
+      this->drawTf(map_ / "gt", T_map_gt_, 1.0, false);
+      this->drawTrajectory(map_ / "gt" / "trajectory",
+                           gt_traj,
+                           aria::viz::ColorMap::kGray,
+                           1.f,
+                           false);
     }
   }
 
@@ -242,7 +246,8 @@ class RerunVisualizer : public Visualizer3D,
                   const FrameIDTimestampMap& timestamp_map) {
     std::lock_guard<std::mutex> lock(rerun_mutex_);
     if (not gt_trajectory_.empty()) {
-      if (est_traj_values.size() % 50 == 0) {
+      if (est_traj_values.size() - prev_alignment_size_ > 50) {
+        prev_alignment_size_ = est_traj_values.size();
         // extract the poses from the gtsam::Values
         std::map<FrameId, gtsam::Pose3> est_poses;
         std::map<FrameId, gtsam::Pose3> gt_poses;
@@ -269,6 +274,20 @@ class RerunVisualizer : public Visualizer3D,
         auto T_est_gt = gtsam::Pose3::Align(poses_to_align);
         if (T_est_gt) {
           T_map_gt_ = T_est_gt.value();
+          rec()->log(
+              "gt_align",
+              rerun::TextLog(
+                  fmt::format("Aligned {} pairs to GT with t_map_gt: {},{},{}",
+                              poses_to_align.size(),
+                              T_map_gt_.x(),
+                              T_map_gt_.y(),
+                              T_map_gt_.z()))
+                  .with_level(rerun::TextLogLevel::Info));
+        } else {
+          rec()->log(
+              "gt_align",
+              rerun::TextLog("Failed to align estimated trajectory to GT.")
+                  .with_level(rerun::TextLogLevel::Error));
         }
 
         this->drawTf(map_ / "gt", T_map_gt_, 1.0, false);
@@ -277,11 +296,6 @@ class RerunVisualizer : public Visualizer3D,
         for (const auto& [key, pose] : gt_trajectory_) {
           gt_traj.push_back(pose);
         }
-        this->drawTrajectory(map_ / "gt" / "trajectory",
-                             gt_traj,
-                             aria::viz::ColorMap::kGray,
-                             1.f,
-                             false);
       }
     }
   }
@@ -307,8 +321,8 @@ class RerunVisualizer : public Visualizer3D,
   void visualizeLandmarks(const VIO::VisualizerInput& input) {
     std::vector<Point3> landmarks;
     std::vector<long> ids;
-    for (const auto& [id, lmk] :
-         input.backend_output_->landmarks_with_id_map_) {
+    auto landmarks_map = input.backend_output_->landmarks_with_id_map_;
+    for (const auto& [id, lmk] : landmarks_map) {
       landmarks.push_back(lmk);
       ids.push_back(id);
     }
@@ -371,7 +385,7 @@ class RerunVisualizer : public Visualizer3D,
                         {aria::viz::ColorMap::kBlue},
                         1.f,
                         false);
-      if (draw_gt_traj_future_.valid() and
+      if (!draw_gt_traj_future_.valid() ||
           draw_gt_traj_future_.wait_for(std::chrono::seconds(0)) ==
               std::future_status::ready) {
         draw_gt_traj_future_ = std::async(std::launch::async,
@@ -445,6 +459,7 @@ class RerunVisualizer : public Visualizer3D,
 
   std::map<Timestamp, Pose3> gt_trajectory_;
   Pose3 T_map_gt_ = Pose3::Identity();
+  size_t prev_alignment_size_ = 0;
 
   std::mutex rerun_mutex_;
 };
