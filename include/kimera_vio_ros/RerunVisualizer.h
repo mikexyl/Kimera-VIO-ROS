@@ -1,6 +1,7 @@
 #pragma once
 
 #include <aria_viz/visualizer_rerun.h>
+#include <glog/logging.h>
 #include <gtsam/slam/dataset.h>
 #include <kimera-vio/loopclosure/LoopClosureDetector-definitions.h>
 #include <kimera-vio/loopclosure/LoopClosureDetector.h>
@@ -85,6 +86,7 @@ class RerunVisualizer : public Visualizer3D,
     std::string map_frame_id = "map";
     std::string gt_csv_file = "";
     std::optional<std::string> recording_id = std::nullopt;
+    std::string result_dir = "rerun_results";
   };
 
   RerunVisualizer(const Params& params)
@@ -92,13 +94,15 @@ class RerunVisualizer : public Visualizer3D,
                         params.odom_frame_id,
                         params.map_frame_id,
                         params.gt_csv_file,
-                        params.recording_id) {}
+                        params.recording_id,
+                        params.result_dir) {}
 
   RerunVisualizer(std::string base_link_frame_id = "baselink",
                   std::string odom_frame_id = "odom",
                   std::string map_frame_id = "map",
                   std::string gt_csv_file = "",
-                  std::optional<std::string> recording_id = std::nullopt)
+                  std::optional<std::string> recording_id = std::nullopt,
+                  std::string result_dir = "")
       : VIO::Visualizer3D(VIO::VisualizationType::kNone),
         aria::viz::VisualizerRerun(aria::viz::VisualizerRerun::Params(
             "kimera_vio",
@@ -106,7 +110,8 @@ class RerunVisualizer : public Visualizer3D,
             "rerun+http://172.17.0.1:9876/proxy")),
         baselink_(base_link_frame_id),
         map_(map_frame_id),
-        odom_(odom_frame_id) {
+        odom_(odom_frame_id),
+        result_dir_(result_dir) {
     // draw the origin frame for visualization
     this->drawTf(map_, Pose3::Identity(), 0.3, true);
 
@@ -132,6 +137,16 @@ class RerunVisualizer : public Visualizer3D,
                            aria::viz::ColorMap::kGray,
                            1.f,
                            false);
+    }
+
+    if (not result_dir_.empty()) {
+      // check if folder exists
+      if (not std::filesystem::exists(result_dir_)) {
+        LOG(FATAL) << "Result directory does not exist: " << result_dir_;
+      }
+      LOG(INFO) << "RerunVisualizer result directory: " << result_dir_;
+    } else {
+      LOG(INFO) << "RerunVisualizer result disabled";
     }
   }
 
@@ -237,8 +252,6 @@ class RerunVisualizer : public Visualizer3D,
 
     // visualizeGraphInSmoother(input);
 
-    visualizeLandmarks(input);
-
     return std::make_unique<VIO::VisualizerOutput>();
   }
 
@@ -318,22 +331,110 @@ class RerunVisualizer : public Visualizer3D,
     }
   }
 
-  void visualizeLandmarks(const VIO::VisualizerInput& input) {
-    std::vector<Point3> landmarks;
-    std::vector<long> ids;
-    auto landmarks_map = input.backend_output_->landmarks_with_id_map_;
-    for (const auto& [id, lmk] : landmarks_map) {
-      landmarks.push_back(lmk);
-      ids.push_back(id);
+  void visualizeLandmarks(const Landmarks& landmarks) {
+    std::vector<Point3> lmk_points(landmarks.begin(), landmarks.end());
+
+    this->drawPoints(map_ / odom_ / "landmarks",
+                     lmk_points,
+                     {aria::viz::ColorMap::kBlack},
+                     {0.01},
+                     {},
+                     false);
+  }
+
+  void saveTUMTrajFile(const gtsam::Values& states,
+                       const FrameIDTimestampMap& timestamp_map) {
+    if (result_dir_.empty()) {
+      return;
+    }
+    if (save_tum_traj_future_.valid() &&
+        save_tum_traj_future_.wait_for(std::chrono::seconds(0)) !=
+            std::future_status::ready) {
+      return;  // Previous save is still in progress
     }
 
-    this->drawLandmarks(map_ / odom_ / "landmarks",
-                        landmarks,
-                        {},
-                        {aria::viz::ColorMap::kBlue},
-                        {0.1f},
-                        {},
-                        false);
+    std::string filename = fmt::format("{}/trajectory_tum.txt", result_dir_);
+
+    auto write_traj = [&](const std::string& filename,
+                          const gtsam::Values& states,
+                          const FrameIDTimestampMap& timestamp_map) {
+      // open file
+      std::ofstream ofs(filename);
+      if (!ofs.is_open()) {
+        throw std::runtime_error("Failed to open file: " + filename);
+      }
+
+      for (auto const& [key, value] : states) {
+        auto it = timestamp_map.find(key);
+        Timestamp timestamp;
+        if (it != timestamp_map.end()) {
+          timestamp = it->second;
+        } else {
+          continue;
+        }
+        double x, y, z, qx, qy, qz, qw;
+        Pose3 pose = value.cast<Pose3>();
+        x = pose.x();
+        y = pose.y();
+        z = pose.z();
+        auto quat = pose.rotation().toQuaternion();
+        qx = quat.x();
+        qy = quat.y();
+        qz = quat.z();
+        qw = quat.w();
+
+        double seconds =
+            static_cast<double>(timestamp) / 1e9;  // Convert ns to s
+
+        ofs << std::fixed << std::setprecision(6) << seconds << " " << x << " "
+            << y << " " << z << " " << qx << " " << qy << " " << qz << " " << qw
+            << std::endl;
+      }
+      // close file
+      ofs.close();
+    };
+
+    save_tum_traj_future_ = std::async(
+        std::launch::async, write_traj, filename, states, timestamp_map);
+  }
+
+  std::vector<Eigen::Vector4f> getColorsFromFactorsType(
+      const NonlinearFactorGraph& factors) {
+    std::vector<Eigen::Vector4f> colors(factors.size(),
+                                        aria::viz::ColorMap::kBlack);
+    for (size_t i = 0; i < factors.size(); ++i) {
+      const auto& factor = factors[i];
+      if (factor == nullptr) {
+        continue;
+      }
+      auto keys = factor->keys();
+      if (keys.size() > 2) continue;
+      uint64_t diff =
+          (keys[0] > keys[1]) ? (keys[0] - keys[1]) : (keys[1] - keys[0]);
+      if (diff == 1) {
+        colors[i] = aria::viz::ColorMap::kBlue;
+        continue;
+      } else if (diff >= 2) {  // loop closure edge
+        auto between_factor =
+            boost::dynamic_pointer_cast<gtsam::BetweenFactor<gtsam::Pose3>>(
+                factor);
+        CHECK(between_factor);
+        auto noise = between_factor->noiseModel();
+        CHECK(noise);
+        auto gauss =
+            boost::dynamic_pointer_cast<gtsam::noiseModel::Gaussian>(noise);
+        CHECK(gauss);
+        auto info = gauss->information();
+        double trans_precision = info.block<3, 3>(3, 3).norm();
+        // if trans precision too small, then rot only factor
+        if (trans_precision < 1e-6) {
+          colors[i] = aria::viz::ColorMap::kRed;
+        } else {
+          colors[i] = aria::viz::ColorMap::kGreen;
+        }
+      }
+    }
+    return colors;
   }
 
   void publishLcdOutput(const LcdOutput::ConstPtr& lcd_output) override {
@@ -344,21 +445,36 @@ class RerunVisualizer : public Visualizer3D,
 
     auto pose3ToString = [](const Pose3& pose) {
       return fmt::format("Pose3({}, {}, {}, {}, {}, {})",
-                         pose.x(),
-                         pose.y(),
-                         pose.z(),
                          pose.rotation().rpy()[0],
                          pose.rotation().rpy()[1],
-                         pose.rotation().rpy()[2]);
+                         pose.rotation().rpy()[2],
+                         pose.x(),
+                         pose.y(),
+                         pose.z());
+    };
+
+    auto rot3ToString = [](const Pose3& rot) {
+      return fmt::format("Rot3({}, {}, {})",
+                         rot.rotation().rpy()[0],
+                         rot.rotation().rpy()[1],
+                         rot.rotation().rpy()[2]);
     };
 
     CHECK(lcd_output);
-    if (lcd_output->lcd_status_ == LCDStatus::LOOP_DETECTED) {
-      std::string message =
-          fmt::format("Loop closure detected: {} -> {}: {}",
-                      lcd_output->id_match_,
-                      lcd_output->id_recent_,
-                      pose3ToString(lcd_output->relative_pose_));
+    if (lcd_output->lcd_status_ == LCDStatus::LOOP_DETECTED or
+        lcd_output->lcd_status_ == LCDStatus::LOOP_DETECTED_ROT) {
+      std::string message;
+      if (lcd_output->lcd_status_ == LCDStatus::LOOP_DETECTED_ROT) {
+        message = fmt::format("Rot Loop closure detected: {} -> {}: {}",
+                              lcd_output->id_match_,
+                              lcd_output->id_recent_,
+                              rot3ToString(lcd_output->relative_pose_));
+      } else {
+        message = fmt::format("loop closure detected: {} -> {}: {}",
+                              lcd_output->id_match_,
+                              lcd_output->id_recent_,
+                              pose3ToString(lcd_output->relative_pose_));
+      }
       this->rec()->log(
           "lcd_log",
           rerun::TextLog(message).with_level(rerun::TextLogLevel::Info));
@@ -377,23 +493,17 @@ class RerunVisualizer : public Visualizer3D,
           rerun::TextLog(message).with_level(rerun::TextLogLevel::Warning));
     }
 
+    visualizeLandmarks(lcd_output->landmarks_);
+
     auto opt_traj = lcd_output->states_;
     if (not opt_traj.empty()) {
       this->drawFactors(map_ / "pose_graph",
                         lcd_output->nfg_,
                         lcd_output->states_,
-                        {aria::viz::ColorMap::kBlue},
+                        getColorsFromFactorsType(lcd_output->nfg_),
                         1.f,
                         false);
-      if (!draw_gt_traj_future_.valid() ||
-          draw_gt_traj_future_.wait_for(std::chrono::seconds(0)) ==
-              std::future_status::ready) {
-        draw_gt_traj_future_ = std::async(std::launch::async,
-                                          &RerunVisualizer::drawGtTraj,
-                                          this,
-                                          lcd_output->states_,
-                                          lcd_output->timestamp_map_);
-      }
+      this->saveTUMTrajFile(lcd_output->states_, lcd_output->timestamp_map_);
     }
   }
 
@@ -456,10 +566,15 @@ class RerunVisualizer : public Visualizer3D,
   std::vector<Pose3> odom_traj_{};
 
   std::future<void> draw_gt_traj_future_;
+  std::future<void> save_tum_traj_future_;
 
   std::map<Timestamp, Pose3> gt_trajectory_;
   Pose3 T_map_gt_ = Pose3::Identity();
   size_t prev_alignment_size_ = 0;
+
+  std::string result_dir_{};
+
+  PointsWithIdMap landmarks_in_odom_;
 
   std::mutex rerun_mutex_;
 };

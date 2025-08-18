@@ -5,7 +5,7 @@
   <arg name="rosbag_path" default="path" />
   <arg name="config_type" default="GrAcoMonoXfeat" />
   <arg name="run_name" default="aerial-05-40m"/>
-  <arg name="gt_csv_file" default="/datasets/graco/$(arg run_name).csv"/>
+  <arg name="gt_csv_file" default="/datasets_extra/graco/$(arg run_name).csv"/>
   <arg name="robot_id" default="0" />
   <param name="use_sim_time" value="true"/>
   <arg name="debug" default="0" />
@@ -24,6 +24,7 @@
   <arg name="should_use_sim_time" default="true"/>
   <arg name="params_folder" value="$(find kimera_vio)/params/$(arg config_type)"/>
   <arg if="$(arg log_output)" name="log_output_path" value="$(find kimera_vio_ros)/output_logs/$(arg config_type)"/>
+  <arg name="result_dir" value="$(find kimera_vio_ros)/output_logs/$(arg config_type)/results"/>
 
   <!-- Subscribed Topics -->
   <arg name="left_cam_topic" value="/$(arg camera_name)/image_raw"/>

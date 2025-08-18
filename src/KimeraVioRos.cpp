@@ -107,6 +107,9 @@ bool KimeraVioRos::runKimeraVio() {
       std::string gt_csv_file;
       nh_private_.param("gt_csv_file", gt_csv_file, std::string(""));
 
+      std::string result_dir;
+      nh_private_.param("result_dir", result_dir, std::string(""));
+
       VLOG(1) << "Creating Rerun Display.";
       CHECK(vio_params_);
       auto now = std::chrono::system_clock::now();
@@ -121,7 +124,8 @@ bool KimeraVioRos::runKimeraVio() {
                                      .odom_frame_id = odom_frame_id_,
                                      .map_frame_id = map_frame_id_,
                                      .gt_csv_file = gt_csv_file,
-                                     .recording_id = now_str};
+                                     .recording_id = now_str,
+                                     .result_dir = result_dir};
 
       visualizer_ = std::make_unique<RerunVisualizer>(params);
       lcd_visualizer_ = std::make_unique<RerunVisualizer>(params);

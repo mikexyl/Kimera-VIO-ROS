@@ -119,6 +119,7 @@ file and include this one to launch KimeraVIO on the dataset of your choice -->
   <arg name="glog_args" value="--logtostderr=1" unless="$(arg glog_to_dir)"/>
 
   <arg name="gt_csv_file" default=""/>
+  <arg name="result_dir" default=""/>
 
   <!-- Launch main node  -->
   <node name="kimera_vio_ros_node" pkg="kimera_vio_ros" type="kimera_vio_ros_node"
@@ -237,6 +238,7 @@ file and include this one to launch KimeraVIO on the dataset of your choice -->
     <!-- <rosparam command="load" file="$(arg params_folder)/calibration.yaml"/> -->
 
     <param name="gt_csv_file" value="$(arg gt_csv_file)"/>
+    <param name="result_dir" value="$(arg result_dir)"/>
   </node>
 
   <!-- Launch visualizer -->
