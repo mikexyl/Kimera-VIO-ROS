@@ -125,6 +125,9 @@ class RerunVisualizer : public Visualizer3D,
       RedirectStdCoutToGlog();
     }
 
+    auto landmark_color = aria::viz::ColorMap::kGray;
+    landmark_color[3] = 50;
+
     if (not gt_csv_file.empty()) {
       gt_trajectory_ = loadTrajectoryMapFromCSV(gt_csv_file);
       std::vector<gtsam::Pose3> gt_traj;
@@ -132,11 +135,8 @@ class RerunVisualizer : public Visualizer3D,
         gt_traj.push_back(pose);
       }
       this->drawTf(map_ / "gt", T_map_gt_, 1.0, false);
-      this->drawTrajectory(map_ / "gt" / "trajectory",
-                           gt_traj,
-                           aria::viz::ColorMap::kGray,
-                           1.f,
-                           false);
+      this->drawTrajectory(
+          map_ / "gt" / "trajectory", gt_traj, landmark_color, 1.f, false);
     }
 
     if (not result_dir_.empty()) {
@@ -337,7 +337,51 @@ class RerunVisualizer : public Visualizer3D,
     this->drawPoints(map_ / odom_ / "landmarks",
                      lmk_points,
                      {aria::viz::ColorMap::kBlack},
-                     {0.01},
+                     {0.003},
+                     {},
+                     false);
+  }
+
+  void visualizeCovisGraph(std::map<FrameId, FrameIdSet> covis_graph,
+                           const Values& states) {
+    NonlinearFactorGraph symbolic_graph;
+    for (const auto& [key, neighbors] : covis_graph) {
+      for (const auto& neighbor : neighbors) {
+        symbolic_graph.add(
+            boost::make_shared<BetweenFactor<Pose3>>(key, neighbor, Pose3{}));
+      }
+    }
+
+    this->drawFactors(map_ / "covis_graph",
+                      symbolic_graph,
+                      states,
+                      aria::viz::ColorMap::kGray,
+                      1.f,
+                      false);
+  }
+
+  void visualizeLCDQueryAndCandidates(FrameId query_id,
+                                      FrameIdSet candidates,
+                                      const Values& states) {
+    Values query_state;
+    query_state.insert(query_id, states.at(query_id));
+
+    Values candidates_states;
+    for (const auto& candidate_id : candidates) {
+      candidates_states.insert(candidate_id, states.at(candidate_id));
+    }
+
+    this->drawPoints(map_ / "lcd" / "query",
+                     query_state,
+                     {aria::viz::ColorMap::kRed},
+                     {10},
+                     {},
+                     false);
+
+    this->drawPoints(map_ / "lcd" / "global_candidates",
+                     candidates_states,
+                     {aria::viz::ColorMap::kGreen},
+                     {10},
                      {},
                      false);
   }
@@ -353,7 +397,7 @@ class RerunVisualizer : public Visualizer3D,
       return;  // Previous save is still in progress
     }
 
-    std::string filename = fmt::format("{}/trajectory_tum.txt", result_dir_);
+    std::string filename = fmt::format("{}/leSLAM.txt", result_dir_);
 
     auto write_traj = [&](const std::string& filename,
                           const gtsam::Values& states,
@@ -411,14 +455,17 @@ class RerunVisualizer : public Visualizer3D,
       if (keys.size() > 2) continue;
       uint64_t diff =
           (keys[0] > keys[1]) ? (keys[0] - keys[1]) : (keys[1] - keys[0]);
-      if (diff == 1) {
+      if (diff == 1 or keys.size() == 1) {  // odometry edge
         colors[i] = aria::viz::ColorMap::kBlue;
         continue;
-      } else if (diff >= 2) {  // loop closure edge
+      } else if (diff > 1 and keys.size() == 2) {  // loop closure edge
         auto between_factor =
             boost::dynamic_pointer_cast<gtsam::BetweenFactor<gtsam::Pose3>>(
                 factor);
-        CHECK(between_factor);
+        if (not between_factor) {
+          factor->print();
+          LOG(FATAL) << "Factor is not a BetweenFactor";
+        }
         auto noise = between_factor->noiseModel();
         CHECK(noise);
         auto gauss =
@@ -465,15 +512,19 @@ class RerunVisualizer : public Visualizer3D,
         lcd_output->lcd_status_ == LCDStatus::LOOP_DETECTED_ROT) {
       std::string message;
       if (lcd_output->lcd_status_ == LCDStatus::LOOP_DETECTED_ROT) {
-        message = fmt::format("Rot Loop closure detected: {} -> {}: {}",
-                              lcd_output->id_match_,
-                              lcd_output->id_recent_,
-                              rot3ToString(lcd_output->relative_pose_));
+        for (int i = 0; i < lcd_output->relative_pose_.size(); ++i) {
+          message += fmt::format("Rot Loop closure detected: {} -> {}: {}",
+                                 lcd_output->id_match_[i],
+                                 lcd_output->id_recent_[i],
+                                 rot3ToString(lcd_output->relative_pose_[i]));
+        }
       } else {
-        message = fmt::format("loop closure detected: {} -> {}: {}",
-                              lcd_output->id_match_,
-                              lcd_output->id_recent_,
-                              pose3ToString(lcd_output->relative_pose_));
+        for (int i = 0; i < lcd_output->relative_pose_.size(); ++i) {
+          message += fmt::format("Loop closure detected: {} -> {}: {}",
+                                 lcd_output->id_match_[i],
+                                 lcd_output->id_recent_[i],
+                                 pose3ToString(lcd_output->relative_pose_[i]));
+        }
       }
       this->rec()->log(
           "lcd_log",
@@ -494,6 +545,9 @@ class RerunVisualizer : public Visualizer3D,
     }
 
     visualizeLandmarks(lcd_output->landmarks_);
+    visualizeLCDQueryAndCandidates(lcd_output->query_frame_,
+                                   lcd_output->global_candidates_,
+                                   lcd_output->states_);
 
     auto opt_traj = lcd_output->states_;
     if (not opt_traj.empty()) {
@@ -503,6 +557,9 @@ class RerunVisualizer : public Visualizer3D,
                         getColorsFromFactorsType(lcd_output->nfg_),
                         1.f,
                         false);
+
+      visualizeCovisGraph(lcd_output->covis_graph_, lcd_output->states_);
+
       this->saveTUMTrajFile(lcd_output->states_, lcd_output->timestamp_map_);
     }
   }

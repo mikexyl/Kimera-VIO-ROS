@@ -35,8 +35,8 @@ bool LcdRegistrationServer::srvCallback(LcdFrameRegistration::Request& req,
   VLOG(1) << "[LCD] registering " << req.query << " -> " << req.match;
   auto result = lcd_module_->registerFrames(req.query, req.match);
   res.valid = result.isLoop();
-  tf2::convert(result.relative_pose_.translation(), res.match_T_query.position);
-  Eigen::Quaterniond match_R_query(result.relative_pose_.rotation().matrix());
+  tf2::convert(result.relative_pose_[0].translation(), res.match_T_query.position);
+  Eigen::Quaterniond match_R_query(result.relative_pose_[0].rotation().matrix());
   tf2::convert(match_R_query, res.match_T_query.orientation);
 
   return true;

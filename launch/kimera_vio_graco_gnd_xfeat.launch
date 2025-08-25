@@ -3,8 +3,8 @@
   <arg name="online" default="false" />
   <arg name="log_output" default="false"/>
   <arg name="rosbag_path" default="path" />
-  <arg name="config_type" default="GrAcoMonoXfeat" />
-  <arg name="seq" default="a5"/>
+  <arg name="config_type" default="GrAcoGndMonoXfeat" />
+  <arg name="seq" default="g1"/>
   <arg name="gt_csv_file" default=""/>
   <arg name="robot_id" default="0" />
   <param name="use_sim_time" value="true"/>

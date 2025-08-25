@@ -341,14 +341,14 @@ void RosLoopClosureVisualizer::publishPoseGraph(
         pose_graph_nodes_.at(pose_graph_nodes_.size() - 1));
     if (lcd_output->lcd_status_ == LCDStatus::LOOP_DETECTED) {
       // Not directly taking the last lc_edge to bypass kimera-rpgo
-      gtsam::Pose3 lc_transform = lcd_output->relative_pose_;
+      gtsam::Pose3 lc_transform = lcd_output->relative_pose_[0];
       pose_graph_tools_msgs::PoseGraphEdge last_lc_edge;
 
       const gtsam::Point3& translation = lc_transform.translation();
       const gtsam::Quaternion& quaternion =
           lc_transform.rotation().toQuaternion();
-      last_lc_edge.key_from = lcd_output->id_match_,
-      last_lc_edge.key_to = lcd_output->id_recent_;
+      last_lc_edge.key_from = lcd_output->id_match_[0],
+      last_lc_edge.key_to = lcd_output->id_recent_[0];
       last_lc_edge.robot_from = robot_id_;
       last_lc_edge.robot_to = robot_id_;
       last_lc_edge.pose.position.x = translation.x();

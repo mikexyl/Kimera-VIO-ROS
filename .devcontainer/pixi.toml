@@ -12,6 +12,7 @@ scripts = ["/opt/ros/noetic/setup.sh", "devel/setup.sh"]
 LD_LIBRARY_PATH = "$LD_LIBRARY_PATH:/usr/lib/x86_64-linux-gnu:/usr/local/lib:${PIXI_PROJECT_ROOT}/.pixi/envs/${PIXI_ENVIRONMENT_NAME}/lib"
 FAISS_CMAKE_ARGS = "-DFAISS_ENABLE_GPU=ON -DFAISS_ENABLE_PYTHON=ON -DFAISS_ENABLE_CUVS=ON -Dcuvs_DIR=/workspaces/.pixi/envs/default/lib/cmake/cuvs -DBUILD_TESTING=OFF"
 LIBGL_ALWAYS_SOFTWARE = "1"
+KIMERA_OUTPUT_PATH = "/workspaces/src/Kimera-VIO-ROS/output_logs"
 
 [tasks.build-faiss]
 cwd = "src/faiss"
@@ -65,10 +66,13 @@ kmr-rviz = { cmd = "rviz -d $(rospack find kimera_vio_ros)/rviz/kimera_vio_euroc
 download-rerun = { cmd = "cd src && wget https://github.com/rerun-io/rerun/releases/download/0.24.0/rerun_cpp_sdk.zip && unzip rerun_cpp_sdk.zip && rm rerun_cpp_sdk.zip" }
 build-kmr = { cmd = "catkin build kimera_vio kimera_vio_ros" }
 play-euroc = { cmd = "cd /datasets/euroc && rosbag play --clock -s 30 MH_02_easy.bag" }
+play-euroc-m4 = { cmd = "cd /datasets/euroc && rosbag play --clock -s 15 MH_04_difficult.bag" }
 play-jackal = { cmd = "cd /datasets && rosbag play --clock -s 20 10_14_acl_jackal.bag" }
-play-alpha = { cmd = "cd /datasets_extra/S3E/Square2 && rosbag play --clock -s 0 square2.bag" }
-play-graco8 = { cmd = "cd /datasets/graco && rosbag play --clock -s 0 aerial-08-25m.bag" }
-play-graco7 = { cmd = "cd /datasets/graco && rosbag play --clock -s 0 aerial-07-25m.bag" }
+play-square1-alpha = { cmd = "cd /datasets_extra/S3E/Square1 && rosbag play --clock -s 0 square1.bag" }
+play-square2-alpha = { cmd = "cd /datasets_extra/S3E/Square2 && rosbag play --clock -s 0 square2.bag" }
+play-graco8 = { cmd = "cd /datasets_extra/graco && rosbag play --clock -s 0 aerial-08-25m.bag" }
+play-graco7 = { cmd = "cd /datasets_extra/graco && rosbag play --clock -s 0 aerial-07-25m.bag" }
+play-graco-a5 = { cmd = "cd /datasets_extra/graco && rosbag play --clock -s 0 aerial-05-40m.bag" }
 play-hilti01 = { cmd = "cd /datasets_extra/hilti && rosbag play --clock -s 0 exp01_construction_ground_level.bag" }
 play-hilti04 = { cmd = "cd /datasets_extra/hilti && rosbag play --clock -s 0 exp04_construction_upper_level.bag" }
 play-hilti09 = { cmd = "cd /datasets_extra/hilti && rosbag play --clock -s 0 exp09_cupola.bag" }
@@ -79,12 +83,112 @@ play-fpv-out-fwd5 = { cmd = "cd /datasets_extra/fpv_racing && rosbag play --cloc
 play-fpv-split = { cmd = "cd /datasets_extra/fpv_racing && rosbag play --clock -s 0 race_1.bag" }
 play-tumvi-c4 = { cmd = "cd /datasets_extra/tum_vi/ros && rosbag play --clock -s 0 dataset-corridor4_512_16.bag" }
 play-tumvi-m2 = { cmd = "cd /datasets_extra/tum_vi/ros && rosbag play --clock -s 30 dataset-magistrale2_512_16.bag" }
+play-loris-cafe1 = { cmd = "cd /datasets_extra/loris/cafe1-1_2-rosbag/uncompressed && rosbag play --clock -s 0 vins1.bag" }
 download-onnx = { cmd = "wget https://codeload.github.com/microsoft/onnxruntime/zip/refs/tags/v1.22.0" }
 jupyter = { cmd = "jupyter lab" }
 
-[tasks.kmr-euroc]
-cmd = "roslaunch kimera_vio_ros kimera_vio_ros_euroc_xfeat.launch online:=true verbosity:={{ v }} debug:={{ debug }}"
+[tasks.evo]
+cmd = "evo_{{ metric }} tum /workspaces/src/Kimera-VIO-ROS/output_logs/{{ config }}/results/trajectory_tum.txt {{ gt }} -vap --plot_mode=xy"
 args = [
+  { "arg" = "metric", "default" = "ape" },
+  { "arg" = "config", "default" = "GrAcoMonoXfeat" },
+  { "arg" = "gt", "default" = "/datasets_extra/graco/aerial-07-25m.txt" },
+]
+
+[tasks.evo-traj]
+cmd = "evo_traj tum $KIMERA_OUTPUT_PATH/{{ config }}/results/trajectory_tum.txt --ref={{ gt }} -vap --plot_mode=xy --save_plot $KIMERA_OUTPUT_PATH/{{ config }}/results/evo.png"
+args = [
+  { "arg" = "config", "default" = "GrAcoMonoXfeat/a7" },
+  { "arg" = "gt", "default" = "/datasets_extra/graco/aerial-07-25m.txt" },
+]
+
+
+[tasks.evo-graco-a5]
+depends-on = [
+  { "task" = "evo-traj", "args" = [
+    "GrAcoMonoXfeat/a5",
+    "/datasets_extra/graco/aerial-05-40m.txt",
+  ] },
+  { "task" = "evo", "args" = [
+    "ape",
+    "GrAcoMonoXfeat/a5",
+    "/datasets_extra/graco/aerial-05-40m.txt",
+  ] },
+  { "task" = "evo", "args" = [
+    "rpe",
+    "GrAcoMonoXfeat/a5",
+    "/datasets_extra/graco/aerial-05-40m.txt",
+  ] },
+]
+
+[tasks.evo-graco-a7]
+depends-on = [
+  { "task" = "evo-traj", "args" = [
+    "GrAcoMonoXfeat/a7",
+    "/datasets_extra/graco/aerial-07-25m.txt",
+  ] },
+  { "task" = "evo", "args" = [
+    "ape",
+    "GrAcoMonoXfeat/a7",
+    "/datasets_extra/graco/aerial-07-25m.txt",
+  ] },
+  { "task" = "evo", "args" = [
+    "rpe",
+    "GrAcoMonoXfeat/a7",
+    "/datasets_extra/graco/aerial-07-25m.txt",
+  ] },
+]
+
+[tasks.evo-graco-a8]
+depends-on = [
+  { "task" = "evo-traj", "args" = [
+    "GrAcoMonoXfeat/a8",
+    "/datasets_extra/graco/aerial-08-25m.txt",
+  ] },
+  { "task" = "evo", "args" = [
+    "ape",
+    "GrAcoMonoXfeat/a8",
+    "/datasets_extra/graco/aerial-08-25m.txt",
+  ] },
+  { "task" = "evo", "args" = [
+    "rpe",
+    "GrAcoMonoXfeat/a8",
+    "/datasets_extra/graco/aerial-08-25m.txt",
+  ] },
+]
+
+[tasks.evo-euroc2]
+depends-on = [
+  { "task" = "evo", "args" = [
+    "ape",
+    "EurocMonoXfeat",
+    "/datasets/euroc/MH_02_easy/state_groundtruth_estimate0/gt.txt",
+  ] },
+  { "task" = "evo", "args" = [
+    "rpe",
+    "EurocMonoXfeat",
+    "/datasets/euroc/MH_02_easy/state_groundtruth_estimate0/gt.txt",
+  ] },
+]
+
+[tasks.evo-euroc-m4]
+depends-on = [
+  { "task" = "evo", "args" = [
+    "ape",
+    "EurocMonoXfeat/m4",
+    "/datasets/euroc/MH_04_difficult/state_groundtruth_estimate0/gt.txt",
+  ] },
+  { "task" = "evo", "args" = [
+    "rpe",
+    "EurocMonoXfeat/m4",
+    "/datasets/euroc/MH_04_difficult/state_groundtruth_estimate0/gt.txt",
+  ] },
+]
+
+[tasks.kmr-euroc]
+cmd = "roslaunch kimera_vio_ros kimera_vio_ros_euroc_xfeat.launch online:=true verbosity:={{ v }} debug:={{ debug }} seq:={{ seq }}"
+args = [
+  { "arg" = "seq", "default" = "M4" },
   { "arg" = "v", "default" = "0" },
   { "arg" = "debug", "default" = "false" },
 ]
@@ -102,8 +206,12 @@ cmd = "roslaunch kimera_vio_ros kimera_vio_s3e_alpha_xfeat.launch online:=true v
 args = [{ "arg" = "v", "default" = "0" }, { "arg" = "debug", "default" = "0" }]
 
 [tasks.kmr-graco]
-cmd = "roslaunch kimera_vio_ros kimera_vio_graco_xfeat.launch online:=true verbosity:={{ v }} debug:={{ debug }}"
-args = [{ "arg" = "v", "default" = "0" }, { "arg" = "debug", "default" = "0" }]
+cmd = "roslaunch kimera_vio_ros kimera_vio_graco_xfeat.launch online:=true verbosity:={{ v }} debug:={{ debug }} seq:={{ seq }}"
+args = [
+  { "arg" = "seq", "default" = "a5" },
+  { "arg" = "v", "default" = "0" },
+  { "arg" = "debug", "default" = "0" },
+]
 
 [tasks.kmr-hilti]
 cmd = "roslaunch kimera_vio_ros kimera_vio_hilti_xfeat.launch online:=true verbosity:={{ v }} debug:={{ debug }}"
@@ -119,6 +227,10 @@ args = [{ "arg" = "v", "default" = "0" }, { "arg" = "debug", "default" = "0" }]
 
 [tasks.kmr-tumvi]
 cmd = "roslaunch kimera_vio_ros kimera_vio_tum_xfeat.launch online:=true verbosity:={{ v }} debug:={{ debug }}"
+args = [{ "arg" = "v", "default" = "0" }, { "arg" = "debug", "default" = "0" }]
+
+[tasks.kmr-loris]
+cmd = "roslaunch kimera_vio_ros kimera_vio_loris_xfeat.launch online:=true verbosity:={{ v }} debug:={{ debug }}"
 args = [{ "arg" = "v", "default" = "0" }, { "arg" = "debug", "default" = "0" }]
 
 [tasks.xfeat-example]
@@ -194,8 +306,17 @@ cmd = [
 
 
 [dependencies]
+python = "3.11.*"
+evo = ">=1.31.1,<2"
+pip = ">=25.2,<26"
 # git = "*"
 # cmake = "<4"
+
+[pypi-dependencies]
+torch = "==1.13"
+opencv-python = "*"
+tqdm = "*"
+imageio = "*"
 
 
 [system-requirements]

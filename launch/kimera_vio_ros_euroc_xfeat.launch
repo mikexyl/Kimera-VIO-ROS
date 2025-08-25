@@ -3,7 +3,9 @@
   <arg name="verbosity"    default="0" />
   <arg name="do_coarse_temporal_sync" default="false"/>
   <arg name="do_fine_temporal_sync" default="false"/>
+  <arg name="seq" default="M4"/>
 
+  <arg name="result_dir" value="$(find kimera_vio_ros)/output_logs/$(arg dataset_name)/$(arg seq)/results"/>
   <!-- Set online to true if you use rosbag play or sensor stream -->
   <arg name="online" default="false" />
   <!-- Set use_sim_time to true if you use rosbag with clock argument -->
