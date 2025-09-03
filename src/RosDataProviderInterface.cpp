@@ -62,23 +62,24 @@ const cv::Mat RosDataProviderInterface::readRosImage(
 
   CHECK(cv_ptr);
   const cv::Mat img_const = cv_ptr->image;  // Don't modify shared image in ROS.
-  cv::Mat converted_img(img_const.size(), CV_8U);
+  cv::Mat converted_img(img_const.size(), CV_8UC3);
   if (img_msg->encoding == sensor_msgs::image_encodings::BGR8) {
     VLOG_EVERY_N(1, 10) << "Converting image...";
-    cv::cvtColor(img_const, converted_img, cv::COLOR_BGR2GRAY);
-    return converted_img;
+    // cv::cvtColor(img_const, converted_img, cv::COLOR_BGR2GRAY);
+    return img_const;
   } else if (img_msg->encoding == sensor_msgs::image_encodings::RGB8) {
     VLOG_EVERY_N(1, 10) << "Converting image...";
-    cv::cvtColor(img_const, converted_img, cv::COLOR_RGB2GRAY);
+    cv::cvtColor(img_const, converted_img, cv::COLOR_RGB2BGR);
     return converted_img;
   } else if (img_msg->encoding == sensor_msgs::image_encodings::BGRA8) {
     VLOG_EVERY_N(1, 10) << "Converting image...";
-    cv::cvtColor(img_const, converted_img, cv::COLOR_BGRA2GRAY);
+    cv::cvtColor(img_const, converted_img, cv::COLOR_BGRA2BGR);
     return converted_img;
   } else if (img_msg->encoding == sensor_msgs::image_encodings::MONO16) {
     VLOG_EVERY_N(1, 10) << "Converting MONO16 to MONO8…";
     // simply drop the low 8 bits:
     img_const.convertTo(converted_img, CV_8U, 1.0 / 256.0);
+    cv::cvtColor(converted_img, converted_img, cv::COLOR_GRAY2BGR);
     return converted_img;
   } else {
     CHECK(cv_ptr->encoding == sensor_msgs::image_encodings::MONO8 ||
@@ -86,7 +87,8 @@ const cv::Mat RosDataProviderInterface::readRosImage(
         << "Expected image with MONO8, 8UC1, BGR8, or RGB8 encoding."
            "Add in here more conversions if you wish."
         << " Encoding: " << img_msg->encoding;
-    return img_const;
+    cv::cvtColor(img_const, converted_img, cv::COLOR_GRAY2BGR);
+    return converted_img;
   }
 }
 

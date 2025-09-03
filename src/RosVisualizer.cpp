@@ -119,7 +119,7 @@ void RosVisualizer::publishTimeHorizonPointCloud(
     const BackendOutput::ConstPtr& output) const {
   CHECK(output);
   const Timestamp& timestamp = output->timestamp_;
-  const PointsWithIdMap& points_with_id = output->landmarks_with_id_map_;
+  const PointsWithIdMap& points_with_id = output->landmarks_in_local_window_;
   const LmkIdToLmkTypeMap& lmk_id_to_lmk_type_map =
       output->lmk_id_to_lmk_type_map_;
 

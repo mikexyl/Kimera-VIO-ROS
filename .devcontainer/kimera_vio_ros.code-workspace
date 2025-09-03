@@ -25,13 +25,10 @@
 			"path": "../../kimera_xfeat_docker"
 		},
 		{
-			"path": "../../Kimera-Multi-LCD"
-		},
-		{
 			"path": "../../vio-factors"
 		},
 		{
-			"path": "../../Kimera-Distributed"
+			"path": "../../vilib"
 		},
 		{
 			"path": "../../gtsam"

@@ -235,20 +235,66 @@ class RerunVisualizer : public Visualizer3D,
                  false);
 
     odom_traj_.push_back(input.backend_output_->W_State_Blkf_.pose_);
+    odom_states_.insert(input.backend_output_->cur_kf_id_,
+                        input.backend_output_->W_State_Blkf_.pose_);
     this->drawTrajectory(map_ / odom_ / "trajectory",
                          odom_traj_,
                          aria::viz::ColorMap::kGreen,
                          1.f,
                          false);
 
+    auto cur_cov = input.backend_output_->state_covariance_lkf_;
+    this->drawUncertainty(map_ / odom_ / baselink_ / "covariance",
+                          Pose3::Identity(),
+                          cur_cov.block<3, 3>(0, 0),
+                          aria::viz::ColorMap::kGreen,
+                          0.1);
+
     cv::Mat tracking_image_clone =
         input.frontend_output_->getTrackingImage()->clone();
 
     if (not input.frontend_output_->getTrackingImage()->empty()) {
-      this->drawImage(map_ / odom_ / baselink_ / "tracking_image",
+      this->drawImage(map_ / odom_ / baselink_ / "tracking" / "image",
                       tracking_image_clone,
-                      true);
+                      false);
     }
+
+    Landmarks lmks_vec;
+    // convert landmark id->landmark map to vector
+    for (const auto& [id, landmark] :
+         input.backend_output_->landmarks_in_local_window_) {
+      lmks_vec.push_back(landmark);
+    }
+
+    // find the earliest pose
+    FrameId earliest_frame = std::numeric_limits<FrameId>::max();
+    for (auto key : input.backend_output_->state_.keys()) {
+      Symbol symbol(key);
+      if (symbol.chr() == kPoseSymbolChar) {
+        if (symbol.index() < earliest_frame) {
+          earliest_frame = symbol.index();
+        }
+      }
+    }
+
+    Pose3 T_smoother_pose = input.backend_output_->state_.at<Pose3>(
+        gtsam::Symbol(kPoseSymbolChar, earliest_frame));
+    Pose3 T_odom_pose = odom_states_.at<Pose3>(earliest_frame);
+    Pose3 W_T_smoother = T_odom_pose * T_smoother_pose.inverse();
+
+    smoother_states_.insert_or_assign(input.backend_output_->state_);
+
+    visualizeLandmarks(
+        map_ / odom_ / "smoother", lmks_vec, aria::viz::ColorMap::kRed);
+    drawTf(map_ / odom_ / "smoother", W_T_smoother);
+    drawPoints(map_ / odom_ / "smoother" / "states",
+               input.backend_output_->state_,
+               {aria::viz::ColorMap::kRed},
+               {0.5});
+    drawPoints(map_ / odom_ / "smoother" / "traj",
+               smoother_states_,
+               {aria::viz::ColorMap::kBlue},
+               {0.5});
 
     // visualizeGraphInSmoother(input);
 
@@ -331,15 +377,13 @@ class RerunVisualizer : public Visualizer3D,
     }
   }
 
-  void visualizeLandmarks(const Landmarks& landmarks) {
+  void visualizeLandmarks(std::filesystem::path base_frame,
+                          const Landmarks& landmarks,
+                          Eigen::Vector4f color) {
     std::vector<Point3> lmk_points(landmarks.begin(), landmarks.end());
 
-    this->drawPoints(map_ / odom_ / "landmarks",
-                     lmk_points,
-                     {aria::viz::ColorMap::kBlack},
-                     {0.003},
-                     {},
-                     false);
+    this->drawPoints(
+        base_frame / "landmarks", lmk_points, {color}, {0.001}, {}, false);
   }
 
   void visualizeCovisGraph(std::map<FrameId, FrameIdSet> covis_graph,
@@ -544,7 +588,8 @@ class RerunVisualizer : public Visualizer3D,
           rerun::TextLog(message).with_level(rerun::TextLogLevel::Warning));
     }
 
-    visualizeLandmarks(lcd_output->landmarks_);
+    visualizeLandmarks(
+        map_ / odom_, lcd_output->landmarks_, aria::viz::ColorMap::kBlack);
     visualizeLCDQueryAndCandidates(lcd_output->query_frame_,
                                    lcd_output->global_candidates_,
                                    lcd_output->states_);
@@ -621,9 +666,12 @@ class RerunVisualizer : public Visualizer3D,
   std::filesystem::path odom_;
 
   std::vector<Pose3> odom_traj_{};
+  gtsam::Values odom_states_;
 
   std::future<void> draw_gt_traj_future_;
   std::future<void> save_tum_traj_future_;
+
+  gtsam::Values smoother_states_;
 
   std::map<Timestamp, Pose3> gt_trajectory_;
   Pose3 T_map_gt_ = Pose3::Identity();

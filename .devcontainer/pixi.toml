@@ -9,7 +9,7 @@ version = "0.1.0"
 scripts = ["/opt/ros/noetic/setup.sh", "devel/setup.sh"]
 
 [activation.env]
-LD_LIBRARY_PATH = "$LD_LIBRARY_PATH:/usr/lib/x86_64-linux-gnu:/usr/local/lib:${PIXI_PROJECT_ROOT}/.pixi/envs/${PIXI_ENVIRONMENT_NAME}/lib"
+LD_LIBRARY_PATH = "$LD_LIBRARY_PATH:/usr/lib/x86_64-linux-gnu:/usr/local/lib:${PIXI_PROJECT_ROOT}/.pixi/envs/${PIXI_ENVIRONMENT_NAME}/lib:/workspaces/src/onnxruntime-linux-x64-gpu-1.22.0/lib"
 FAISS_CMAKE_ARGS = "-DFAISS_ENABLE_GPU=ON -DFAISS_ENABLE_PYTHON=ON -DFAISS_ENABLE_CUVS=ON -Dcuvs_DIR=/workspaces/.pixi/envs/default/lib/cmake/cuvs -DBUILD_TESTING=OFF"
 LIBGL_ALWAYS_SOFTWARE = "1"
 KIMERA_OUTPUT_PATH = "/workspaces/src/Kimera-VIO-ROS/output_logs"
@@ -65,7 +65,7 @@ rqt = { cmd = "rqt --force-discover" }
 kmr-rviz = { cmd = "rviz -d $(rospack find kimera_vio_ros)/rviz/kimera_vio_euroc.rviz" }
 download-rerun = { cmd = "cd src && wget https://github.com/rerun-io/rerun/releases/download/0.24.0/rerun_cpp_sdk.zip && unzip rerun_cpp_sdk.zip && rm rerun_cpp_sdk.zip" }
 build-kmr = { cmd = "catkin build kimera_vio kimera_vio_ros" }
-play-euroc = { cmd = "cd /datasets/euroc && rosbag play --clock -s 30 MH_02_easy.bag" }
+play-euroc-m2 = { cmd = "cd /datasets/euroc && rosbag play --clock -s 30 MH_02_easy.bag" }
 play-euroc-m4 = { cmd = "cd /datasets/euroc && rosbag play --clock -s 15 MH_04_difficult.bag" }
 play-jackal = { cmd = "cd /datasets && rosbag play --clock -s 20 10_14_acl_jackal.bag" }
 play-square1-alpha = { cmd = "cd /datasets_extra/S3E/Square1 && rosbag play --clock -s 0 square1.bag" }
@@ -73,10 +73,14 @@ play-square2-alpha = { cmd = "cd /datasets_extra/S3E/Square2 && rosbag play --cl
 play-graco8 = { cmd = "cd /datasets_extra/graco && rosbag play --clock -s 0 aerial-08-25m.bag" }
 play-graco7 = { cmd = "cd /datasets_extra/graco && rosbag play --clock -s 0 aerial-07-25m.bag" }
 play-graco-a5 = { cmd = "cd /datasets_extra/graco && rosbag play --clock -s 0 aerial-05-40m.bag" }
-play-hilti01 = { cmd = "cd /datasets_extra/hilti && rosbag play --clock -s 0 exp01_construction_ground_level.bag" }
-play-hilti04 = { cmd = "cd /datasets_extra/hilti && rosbag play --clock -s 0 exp04_construction_upper_level.bag" }
-play-hilti09 = { cmd = "cd /datasets_extra/hilti && rosbag play --clock -s 0 exp09_cupola.bag" }
-play-hilti18 = { cmd = "cd /datasets_extra/hilti && rosbag play --clock -s 0 exp18_corridor_lower_gallery_2.bag" }
+play-graco-g1 = { cmd = "cd /datasets_extra/graco && rosbag play --clock -s 0 ground-01.bag" }
+play-graco-g2 = { cmd = "cd /datasets_extra/graco && rosbag play --clock -s 0 ground-02.bag" }
+play-hilti-01 = { cmd = "cd /datasets_extra/hilti && rosbag play --clock -s 0 exp01_construction_ground_level.bag" }
+play-hilti-04 = { cmd = "cd /datasets_extra/hilti && rosbag play --clock -s 0 exp04_construction_upper_level.bag" }
+play-hilti-06 = { cmd = "cd /datasets_extra/hilti && rosbag play --clock -s 0 exp06_construction_upper_level_3.bag" }
+play-hilti-09 = { cmd = "cd /datasets_extra/hilti && rosbag play --clock -s 0 exp09_cupola.bag" }
+play-hilti-16 = { cmd = "cd /datasets_extra/hilti && rosbag play --clock -s 0 exp16_attic_to_upper_gallery_2.bag" }
+play-hilti-18 = { cmd = "cd /datasets_extra/hilti && rosbag play --clock -s 0 exp18_corridor_lower_gallery_2.bag" }
 play-fpv-out-fwd1 = { cmd = "cd /datasets_extra/fpv_racing && rosbag play --clock -s 25 outdoor_forward_1_snapdragon_with_gt.bag" }
 play-fpv-out-fwd3 = { cmd = "cd /datasets_extra/fpv_racing && rosbag play --clock -s 25 outdoor_forward_3_snapdragon_with_gt.bag" }
 play-fpv-out-fwd5 = { cmd = "cd /datasets_extra/fpv_racing && rosbag play --clock -s 45 outdoor_forward_5_snapdragon_with_gt.bag" }
@@ -84,59 +88,81 @@ play-fpv-split = { cmd = "cd /datasets_extra/fpv_racing && rosbag play --clock -
 play-tumvi-c4 = { cmd = "cd /datasets_extra/tum_vi/ros && rosbag play --clock -s 0 dataset-corridor4_512_16.bag" }
 play-tumvi-m2 = { cmd = "cd /datasets_extra/tum_vi/ros && rosbag play --clock -s 30 dataset-magistrale2_512_16.bag" }
 play-loris-cafe1 = { cmd = "cd /datasets_extra/loris/cafe1-1_2-rosbag/uncompressed && rosbag play --clock -s 0 vins1.bag" }
+play-nc-05 = { cmd = "cd /datasets_extra/new_college/05_quad_with_dynamics && rosbag play --clock -s 0 05.bag" }
+play-nc-01 = { cmd = "cd /datasets_extra/new_college/01_short_experiment && rosbag play --clock -s 0 05.bag" }
+play-spires-church = { cmd = "cd /datasets_extra/spires/christchurch && rosbag play --clock -s 0 church.bag /tf:= /tf_static:=" }
 download-onnx = { cmd = "wget https://codeload.github.com/microsoft/onnxruntime/zip/refs/tags/v1.22.0" }
 jupyter = { cmd = "jupyter lab" }
 
-[tasks.evo]
-cmd = "evo_{{ metric }} tum /workspaces/src/Kimera-VIO-ROS/output_logs/{{ config }}/results/trajectory_tum.txt {{ gt }} -vap --plot_mode=xy"
+[tasks.evo-ape]
+cmd = "evo_ape tum /workspaces/src/Kimera-VIO-ROS/output_logs/{{ config }}/results/leSLAM.txt {{ gt }} -vap --plot_mode=xy --t_max_diff=0.2"
 args = [
-  { "arg" = "metric", "default" = "ape" },
+  { "arg" = "config", "default" = "GrAcoMonoXfeat" },
+  { "arg" = "gt", "default" = "/datasets_extra/graco/aerial-07-25m.txt" },
+]
+
+[tasks.evo-rpe]
+cmd = "evo_rpe tum /workspaces/src/Kimera-VIO-ROS/output_logs/{{ config }}/results/leSLAM.txt {{ gt }} -vap --plot_mode=xy --delta=5 --delta_unit=m --t_max_diff=0.2"
+args = [
   { "arg" = "config", "default" = "GrAcoMonoXfeat" },
   { "arg" = "gt", "default" = "/datasets_extra/graco/aerial-07-25m.txt" },
 ]
 
 [tasks.evo-traj]
-cmd = "evo_traj tum $KIMERA_OUTPUT_PATH/{{ config }}/results/trajectory_tum.txt --ref={{ gt }} -vap --plot_mode=xy --save_plot $KIMERA_OUTPUT_PATH/{{ config }}/results/evo.png"
+cmd = "evo_traj tum $KIMERA_OUTPUT_PATH/{{ config }}/results/leSLAM.txt --ref={{ gt }} -vap --plot_mode=xy --save_plot $KIMERA_OUTPUT_PATH/{{ config }}/results/evo.png --t_max_diff=0.2"
 args = [
   { "arg" = "config", "default" = "GrAcoMonoXfeat/a7" },
   { "arg" = "gt", "default" = "/datasets_extra/graco/aerial-07-25m.txt" },
 ]
 
 
+[tasks.evo-hilti-04]
+cmd = "pixi run evo-traj {{ config }} {{ gt }} && pixi run evo ape {{ config }} {{ gt }} && pixi run evo rpe {{ config }} {{ gt }}"
+args = [
+  { "arg" = "config", "default" = "HiltiMonoXfeat/04" },
+  { "arg" = "gt", "default" = "/datasets_extra/hilti/exp_04_construction_upper_level_imu.txt" },
+]
+
+[tasks.evo-hilti-06]
+cmd = "pixi run evo-traj {{ config }} {{ gt }} && pixi run evo-ape {{ config }} {{ gt }} && pixi run evo-rpe {{ config }} {{ gt }}"
+args = [
+  { "arg" = "config", "default" = "HiltiMonoXfeat/06" },
+  { "arg" = "gt", "default" = "/datasets_extra/hilti/exp_06_construction_upper_level_3_imu.txt" },
+]
+
+[tasks.evo-hilti-16]
+cmd = "pixi run evo-traj {{ config }} {{ gt }} && pixi run evo-ape {{ config }} {{ gt }} && pixi run evo-rpe {{ config }} {{ gt }}"
+args = [
+  { "arg" = "config", "default" = "HiltiMonoXfeat/16" },
+  { "arg" = "gt", "default" = "/datasets_extra/hilti/exp16_attic_to_upper_gallery_2_imu.txt" },
+]
+
+[tasks.evo-graco-g1]
+cmd = "pixi run evo-traj {{ config }} {{ gt }} && pixi run evo-ape {{ config }} {{ gt }} && pixi run evo-rpe {{ config }} {{ gt }}"
+args = [
+  { "arg" = "config", "default" = "GrAcoGndMonoXfeat/g1" },
+  { "arg" = "gt", "default" = "/datasets_extra/graco/ground-01.txt" },
+]
+
+[tasks.evo-graco-g2]
+cmd = "pixi run evo-traj {{ config }} {{ gt }} && pixi run evo-ape {{ config }} {{ gt }} && pixi run evo-rpe {{ config }} {{ gt }}"
+args = [
+  { "arg" = "config", "default" = "GrAcoGndMonoXfeat/g2" },
+  { "arg" = "gt", "default" = "/datasets_extra/graco/ground-02.txt" },
+]
+
 [tasks.evo-graco-a5]
-depends-on = [
-  { "task" = "evo-traj", "args" = [
-    "GrAcoMonoXfeat/a5",
-    "/datasets_extra/graco/aerial-05-40m.txt",
-  ] },
-  { "task" = "evo", "args" = [
-    "ape",
-    "GrAcoMonoXfeat/a5",
-    "/datasets_extra/graco/aerial-05-40m.txt",
-  ] },
-  { "task" = "evo", "args" = [
-    "rpe",
-    "GrAcoMonoXfeat/a5",
-    "/datasets_extra/graco/aerial-05-40m.txt",
-  ] },
+cmd = "pixi run evo-traj {{ config }} {{ gt }} && pixi run evo-ape {{ config }} {{ gt }} && pixi run evo-rpe {{ config }} {{ gt }}"
+args = [
+  { "arg" = "config", "default" = "GrAcoMonoXfeat/a5" },
+  { "arg" = "gt", "default" = "/datasets_extra/graco/aerial-05-40m.txt" },
 ]
 
 [tasks.evo-graco-a7]
-depends-on = [
-  { "task" = "evo-traj", "args" = [
-    "GrAcoMonoXfeat/a7",
-    "/datasets_extra/graco/aerial-07-25m.txt",
-  ] },
-  { "task" = "evo", "args" = [
-    "ape",
-    "GrAcoMonoXfeat/a7",
-    "/datasets_extra/graco/aerial-07-25m.txt",
-  ] },
-  { "task" = "evo", "args" = [
-    "rpe",
-    "GrAcoMonoXfeat/a7",
-    "/datasets_extra/graco/aerial-07-25m.txt",
-  ] },
+cmd = "pixi run evo-traj {{ config }} {{ gt }} && pixi run evo-ape {{ config }} {{ gt }} && pixi run evo-rpe {{ config }} {{ gt }}"
+args = [
+  { "arg" = "config", "default" = "GrAcoMonoXfeat/a7" },
+  { "arg" = "gt", "default" = "/datasets_extra/graco/aerial-07-25m.txt" },
 ]
 
 [tasks.evo-graco-a8]
@@ -157,16 +183,14 @@ depends-on = [
   ] },
 ]
 
-[tasks.evo-euroc2]
+[tasks.evo-euroc-m2]
 depends-on = [
-  { "task" = "evo", "args" = [
-    "ape",
-    "EurocMonoXfeat",
+  { "task" = "evo-ape", "args" = [
+    "EurocMonoXfeat/m2",
     "/datasets/euroc/MH_02_easy/state_groundtruth_estimate0/gt.txt",
   ] },
-  { "task" = "evo", "args" = [
-    "rpe",
-    "EurocMonoXfeat",
+  { "task" = "evo-rpe", "args" = [
+    "EurocMonoXfeat/m2",
     "/datasets/euroc/MH_02_easy/state_groundtruth_estimate0/gt.txt",
   ] },
 ]
@@ -213,9 +237,37 @@ args = [
   { "arg" = "debug", "default" = "0" },
 ]
 
+[tasks.kmr-graco-gnd]
+cmd = "roslaunch kimera_vio_ros kimera_vio_graco_gnd_xfeat.launch online:=true verbosity:={{ v }} debug:={{ debug }} seq:={{ seq }}"
+args = [
+  { "arg" = "seq", "default" = "g1" },
+  { "arg" = "v", "default" = "0" },
+  { "arg" = "debug", "default" = "0" },
+]
+
 [tasks.kmr-hilti]
-cmd = "roslaunch kimera_vio_ros kimera_vio_hilti_xfeat.launch online:=true verbosity:={{ v }} debug:={{ debug }}"
-args = [{ "arg" = "v", "default" = "0" }, { "arg" = "debug", "default" = "0" }]
+cmd = "roslaunch kimera_vio_ros kimera_vio_hilti_xfeat.launch online:=true verbosity:={{ v }} debug:={{ debug }} seq:={{ seq }}"
+args = [
+  { "arg" = "seq", "default" = "a5" },
+  { "arg" = "v", "default" = "0" },
+  { "arg" = "debug", "default" = "0" },
+]
+
+[tasks.kmr-spires]
+cmd = "roslaunch kimera_vio_ros kimera_vio_spires_xfeat.launch online:=true verbosity:={{ v }} debug:={{ debug }} seq:={{ seq }}"
+args = [
+  { "arg" = "seq", "default" = "church" },
+  { "arg" = "v", "default" = "0" },
+  { "arg" = "debug", "default" = "0" },
+]
+
+[tasks.kmr-nc]
+cmd = "roslaunch kimera_vio_ros kimera_vio_nc_xfeat.launch online:=true verbosity:={{ v }} debug:={{ debug }} seq:={{ seq }}"
+args = [
+  { "arg" = "seq", "default" = "05" },
+  { "arg" = "v", "default" = "0" },
+  { "arg" = "debug", "default" = "0" },
+]
 
 [tasks.kmr-fpv-out-fwd]
 cmd = "roslaunch kimera_vio_ros kimera_vio_fpv_out_fwd_xfeat.launch online:=true verbosity:={{ v }} debug:={{ debug }}"
@@ -230,12 +282,24 @@ cmd = "roslaunch kimera_vio_ros kimera_vio_tum_xfeat.launch online:=true verbosi
 args = [{ "arg" = "v", "default" = "0" }, { "arg" = "debug", "default" = "0" }]
 
 [tasks.kmr-loris]
-cmd = "roslaunch kimera_vio_ros kimera_vio_loris_xfeat.launch online:=true verbosity:={{ v }} debug:={{ debug }}"
-args = [{ "arg" = "v", "default" = "0" }, { "arg" = "debug", "default" = "0" }]
+cmd = "roslaunch kimera_vio_ros kimera_vio_loris_xfeat.launch online:=true verbosity:={{ v }} debug:={{ debug }} seq:={{ seq }}"
+args = [
+  { "arg" = "seq", "default" = "caf1" },
+  { "arg" = "v", "default" = "0" },
+  { "arg" = "debug", "default" = "0" },
+]
 
 [tasks.xfeat-example]
 depends-on = [{ "task" = "build", "args" = ["xfeat-cpp"] }]
 cmd = "cd devel/bin && ./xfeat_example $PIXI_PROJECT_ROOT/src/xfeat-cpp/image $PIXI_PROJECT_ROOT/src/xfeat-cpp/onnx_model 0.5 2"
+
+[tasks.xfeat-nms]
+depends-on = [{ "task" = "build", "args" = ["xfeat-cpp"] }]
+cmd = "cd devel/bin && ./feature_nms_example $PIXI_PROJECT_ROOT/src/xfeat-cpp/image/sample1.jpg $PIXI_PROJECT_ROOT/src/xfeat-cpp/onnx_model 0.5 2"
+
+[tasks.xfeat-faiss-example]
+depends-on = [{ "task" = "build", "args" = ["xfeat-cpp"] }]
+cmd = "cd devel/bin && ./batch_match_example /datasets/euroc/MH_01_easy/mav0/cam0/data $PIXI_PROJECT_ROOT/src/xfeat-cpp/onnx_model"
 
 [tasks.build]
 depends-on = ["config"]
@@ -269,12 +333,31 @@ cmd = [
   "--export_path=lg_{{ width }}x{{ height }}_{{ top_k }}.onnx",
 ]
 
+[tasks.export-lg-dynamic]
+args = [
+  { "arg" = "width", "default" = "640" },
+  { "arg" = "height", "default" = "480" },
+]
+cmd = [
+  "cd",
+  "src/accelerated_features",
+  "&&",
+  "python",
+  "export.py",
+  "--xfeat_only_lighterglue",
+  "--width={{ width }}",
+  "--height={{ height }}",
+  "--opset=18",
+  "--export_path=lg_{{ width }}x{{ height }}_dyn.onnx",
+  "--dynamic",
+]
+
 
 [tasks.extract-netvlad-desc]
 depends-on = [{ "task" = "build", "args" = ["xfeat-cpp"] }]
 args = [
-  { "arg" = "image_folder", "default" = "/datasets/gsv_cities/Images" },
-  { "arg" = "output_desc_file", "default" = "$PIXI_PROJECT_ROOT/src/xfeat-cpp/faiss_ivfflat.index.desc.bin" },
+  { "arg" = "image_folder", "default" = "/datasets_extra/gsv_cities/Images" },
+  { "arg" = "output_desc_file", "default" = "$PIXI_PROJECT_ROOT/src/xfeat-cpp/faiss.index.desc.bin" },
   { "arg" = "model_folder", "default" = "$PIXI_PROJECT_ROOT/src/xfeat-cpp/onnx_model" },
 ]
 cmd = [
@@ -302,6 +385,7 @@ cmd = [
   "{{ data_file }}",
   "{{ output_index_file }}",
   "{{ mode }}",
+  "0",
 ]
 
 
@@ -309,15 +393,17 @@ cmd = [
 python = "3.11.*"
 evo = ">=1.31.1,<2"
 pip = ">=25.2,<26"
+empy = ">=3.3.4,<4"
+catkin_pkg = ">=1.0.0,<2"
 # git = "*"
 # cmake = "<4"
 
 [pypi-dependencies]
-torch = "==1.13"
-opencv-python = "*"
 tqdm = "*"
 imageio = "*"
-
+onnxsim = "*"
+torch = { version = "*", index = "https://download.pytorch.org/whl/cu124" }
+torchvision = { version = "*", index = "https://download.pytorch.org/whl/cu124" }
 
 [system-requirements]
 cuda = "12"
