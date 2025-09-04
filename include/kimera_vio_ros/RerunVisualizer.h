@@ -10,6 +10,7 @@
 #include <spdlog/fmt/fmt.h>
 
 #include <future>
+#include <chrono>
 
 namespace VIO {
 
@@ -148,6 +149,9 @@ class RerunVisualizer : public Visualizer3D,
     } else {
       LOG(INFO) << "RerunVisualizer result disabled";
     }
+
+    // Initialize timer for trajectory saving
+    last_save_time_ = std::chrono::steady_clock::now();
   }
 
   virtual ~RerunVisualizer() = default;
@@ -237,6 +241,8 @@ class RerunVisualizer : public Visualizer3D,
     odom_traj_.push_back(input.backend_output_->W_State_Blkf_.pose_);
     odom_states_.insert(input.backend_output_->cur_kf_id_,
                         input.backend_output_->W_State_Blkf_.pose_);
+    timestamp_map_.insert(
+        {input.backend_output_->cur_kf_id_, input.timestamp_});
     this->drawTrajectory(map_ / odom_ / "trajectory",
                          odom_traj_,
                          aria::viz::ColorMap::kGreen,
@@ -296,7 +302,8 @@ class RerunVisualizer : public Visualizer3D,
                {aria::viz::ColorMap::kBlue},
                {0.5});
 
-    // visualizeGraphInSmoother(input);
+    // Check if it's time to save trajectories (every 10 seconds)
+    this->checkAndSaveTrajectories();
 
     return std::make_unique<VIO::VisualizerOutput>();
   }
@@ -396,12 +403,11 @@ class RerunVisualizer : public Visualizer3D,
       }
     }
 
-    this->drawFactors(map_ / "covis_graph",
-                      symbolic_graph,
-                      states,
-                      aria::viz::ColorMap::kGray,
-                      1.f,
-                      false);
+    auto gray = aria::viz::ColorMap::kGray;
+    gray[3] = 50;
+
+    this->drawFactors(
+        map_ / "covis_graph", symbolic_graph, states, gray, 1.f, false);
   }
 
   void visualizeLCDQueryAndCandidates(FrameId query_id,
@@ -418,30 +424,51 @@ class RerunVisualizer : public Visualizer3D,
     this->drawPoints(map_ / "lcd" / "query",
                      query_state,
                      {aria::viz::ColorMap::kRed},
-                     {10},
+                     {100},
                      {},
                      false);
 
     this->drawPoints(map_ / "lcd" / "global_candidates",
                      candidates_states,
                      {aria::viz::ColorMap::kGreen},
-                     {10},
+                     {100},
                      {},
                      false);
   }
 
+  void checkAndSaveTrajectories() {
+    auto current_time = std::chrono::steady_clock::now();
+    if (current_time - last_save_time_ >= save_interval_) {
+      if (!odom_states_.empty() && !timestamp_map_.empty()) {
+        this->saveTUMTrajFile(odom_states_, timestamp_map_, "leVIO");
+      }
+      last_save_time_ = current_time;
+    }
+  }
+
+  void forceSaveTrajectories() {
+    if (!odom_states_.empty() && !timestamp_map_.empty()) {
+      this->saveTUMTrajFile(odom_states_, timestamp_map_, "leVIO");
+    }
+    last_save_time_ = std::chrono::steady_clock::now();
+  }
+
   void saveTUMTrajFile(const gtsam::Values& states,
-                       const FrameIDTimestampMap& timestamp_map) {
+                       const FrameIDTimestampMap& timestamp_map,
+                       std::string name) {
     if (result_dir_.empty()) {
       return;
     }
-    if (save_tum_traj_future_.valid() &&
-        save_tum_traj_future_.wait_for(std::chrono::seconds(0)) !=
+    if (save_traj_futures_.find(name) != save_traj_futures_.end() &&
+        save_traj_futures_[name].valid() &&
+        save_traj_futures_[name].wait_for(std::chrono::seconds(0)) !=
             std::future_status::ready) {
       return;  // Previous save is still in progress
+    } else {
+      save_traj_futures_.emplace(name, std::future<void>());
     }
 
-    std::string filename = fmt::format("{}/leSLAM.txt", result_dir_);
+    std::string filename = fmt::format("{}/{}.txt", result_dir_, name);
 
     auto write_traj = [&](const std::string& filename,
                           const gtsam::Values& states,
@@ -482,7 +509,7 @@ class RerunVisualizer : public Visualizer3D,
       ofs.close();
     };
 
-    save_tum_traj_future_ = std::async(
+    save_traj_futures_[name] = std::async(
         std::launch::async, write_traj, filename, states, timestamp_map);
   }
 
@@ -605,7 +632,8 @@ class RerunVisualizer : public Visualizer3D,
 
       visualizeCovisGraph(lcd_output->covis_graph_, lcd_output->states_);
 
-      this->saveTUMTrajFile(lcd_output->states_, lcd_output->timestamp_map_);
+      this->saveTUMTrajFile(
+          lcd_output->states_, lcd_output->timestamp_map_, "leSLAM");
     }
   }
 
@@ -669,7 +697,7 @@ class RerunVisualizer : public Visualizer3D,
   gtsam::Values odom_states_;
 
   std::future<void> draw_gt_traj_future_;
-  std::future<void> save_tum_traj_future_;
+  std::map<std::string, std::future<void>> save_traj_futures_;
 
   gtsam::Values smoother_states_;
 
@@ -681,7 +709,13 @@ class RerunVisualizer : public Visualizer3D,
 
   PointsWithIdMap landmarks_in_odom_;
 
+  FrameIDTimestampMap timestamp_map_;
+
   std::mutex rerun_mutex_;
+
+  // Timer for saving trajectory files
+  std::chrono::steady_clock::time_point last_save_time_;
+  static constexpr std::chrono::seconds save_interval_{10};
 };
 
 }  // namespace VIO
