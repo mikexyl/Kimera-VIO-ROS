@@ -13,7 +13,7 @@
   <arg name="do_coarse_temporal_sync" default="false"/>
   <arg name="do_fine_temporal_sync" default="false"/>
   <arg name="use_external_odom" default="false"/>
-  <arg name="use_lcd" default="0"/>
+  <arg name="use_lcd" default="2"/>
   <arg name="lcd_no_optimize" default="false"/>
   <arg name="lcd_no_detection" default="false"/>
 

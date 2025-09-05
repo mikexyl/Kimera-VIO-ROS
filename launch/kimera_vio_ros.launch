@@ -240,12 +240,4 @@ file and include this one to launch KimeraVIO on the dataset of your choice -->
     <param name="gt_csv_file" value="$(arg gt_csv_file)"/>
     <param name="result_dir" value="$(arg result_dir)"/>
   </node>
-
-  <!-- Launch visualizer -->
-  <include unless="$(arg multirobot)" file="$(find pose_graph_tools_ros)/launch/posegraph_view.launch" >
-    <arg name="frame_id"      value="$(arg map_frame_id)" />
-    <arg name="graph_topic"   value="pose_graph" />
-    <arg name="ns"            value="kimera_vio_ros"/>
-  </include>
-
 </launch>

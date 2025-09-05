@@ -128,19 +128,16 @@ bool KimeraVioRos::runKimeraVio() {
                                      .result_dir = result_dir};
 
       visualizer_ = std::make_unique<RerunVisualizer>(params);
-      lcd_visualizer_ = std::make_unique<RerunVisualizer>(params);
     } else if (viz_type_ == VizType::kRviz) {
       VLOG(1) << "Creating Ros Display.";
       CHECK(vio_params_);
       visualizer_ = std::make_unique<RosVisualizer>(*vio_params_);
-      lcd_visualizer_.reset(new RosLoopClosureVisualizer());
     }
 
     ros_display_ = std::make_unique<RosDisplay>();
   } else {
     ros_display_ = nullptr;
     visualizer_ = nullptr;
-    lcd_visualizer_ = nullptr;
   }
 
   VLOG(1) << "Destroy Vio Pipeline.";
@@ -361,14 +358,6 @@ void KimeraVioRos::connectVIO() {
         &VIO::RgbdImuPipeline::fillDepthFrameQueue,
         CHECK_NOTNULL(dynamic_cast<RgbdImuPipeline*>(vio_pipeline_.get())),
         std::placeholders::_1));
-  }
-
-  if (lcd_visualizer_) {
-    vio_pipeline_->registerLcdOutputCallback([&](const auto& msg) {
-      if (msg) {
-        lcd_visualizer_->publishLcdOutput(msg);
-      }
-    });
   }
 }
 

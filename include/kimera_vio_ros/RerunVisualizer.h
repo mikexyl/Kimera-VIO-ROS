@@ -9,8 +9,8 @@
 #include <kimera_vio_ros/LoopClosureVisualizer.h>
 #include <spdlog/fmt/fmt.h>
 
-#include <future>
 #include <chrono>
+#include <future>
 
 namespace VIO {
 
@@ -77,9 +77,7 @@ class GlogStreamBuf : public std::streambuf {
   char buffer_[1024];
 };
 
-class RerunVisualizer : public Visualizer3D,
-                        aria::viz::VisualizerRerun,
-                        public LoopClosureVisualizer {
+class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
  public:
   struct Params {
     std::string base_link_frame_id = "baselink";
@@ -297,13 +295,38 @@ class RerunVisualizer : public Visualizer3D,
                input.backend_output_->state_,
                {aria::viz::ColorMap::kRed},
                {0.5});
+    for (const auto& key : smoother_states_.keys()) {
+      Symbol symbol(key);
+      if (symbol.chr() == kPoseSymbolChar) {
+        pose_states_.insert_or_assign(symbol.index(),
+                                      smoother_states_.at<Pose3>(key));
+      }
+    }
     drawPoints(map_ / odom_ / "smoother" / "traj",
-               smoother_states_,
+               pose_states_,
                {aria::viz::ColorMap::kBlue},
                {0.5});
 
     // Check if it's time to save trajectories (every 10 seconds)
-    this->checkAndSaveTrajectories();
+    this->checkAndSaveTrajectories(pose_states_);
+
+    // Launch LCD output processing asynchronously
+    // Check if previous LCD processing is still running
+    if (lcd_output_future_.valid() &&
+        lcd_output_future_.wait_for(std::chrono::seconds(0)) !=
+            std::future_status::ready) {
+      // Previous LCD processing is still running, skip this frame's LCD output
+    } else {
+      // Clean up previous future if it's ready
+      if (lcd_output_future_.valid()) {
+        lcd_output_future_.get();  // This will clean up the completed future
+      }
+      // Launch new async LCD output processing
+      lcd_output_future_ = std::async(std::launch::async,
+                                      &RerunVisualizer::publishLcdOutput,
+                                      this,
+                                      input.lcd_output_);
+    }
 
     return std::make_unique<VIO::VisualizerOutput>();
   }
@@ -404,7 +427,6 @@ class RerunVisualizer : public Visualizer3D,
     }
 
     auto gray = aria::viz::ColorMap::kGray;
-    gray[3] = 50;
 
     this->drawFactors(
         map_ / "covis_graph", symbolic_graph, states, gray, 1.f, false);
@@ -436,11 +458,11 @@ class RerunVisualizer : public Visualizer3D,
                      false);
   }
 
-  void checkAndSaveTrajectories() {
+  void checkAndSaveTrajectories(const gtsam::Values& states = gtsam::Values()) {
     auto current_time = std::chrono::steady_clock::now();
     if (current_time - last_save_time_ >= save_interval_) {
-      if (!odom_states_.empty() && !timestamp_map_.empty()) {
-        this->saveTUMTrajFile(odom_states_, timestamp_map_, "leVIO");
+      if (!states.empty() && !timestamp_map_.empty()) {
+        this->saveTUMTrajFile(states, timestamp_map_, "leVIO");
       }
       last_save_time_ = current_time;
     }
@@ -541,6 +563,12 @@ class RerunVisualizer : public Visualizer3D,
         CHECK(noise);
         auto gauss =
             boost::dynamic_pointer_cast<gtsam::noiseModel::Gaussian>(noise);
+        if (not gauss) {
+          auto robust =
+              boost::dynamic_pointer_cast<gtsam::noiseModel::Robust>(noise);
+          gauss = boost::dynamic_pointer_cast<gtsam::noiseModel::Gaussian>(
+              robust->noise());
+        }
         CHECK(gauss);
         auto info = gauss->information();
         double trans_precision = info.block<3, 3>(3, 3).norm();
@@ -556,8 +584,9 @@ class RerunVisualizer : public Visualizer3D,
   }
 
   void publishLcdOutput(const LcdOutput::ConstPtr& lcd_output) override {
-    std::lock_guard<std::mutex> lock(rerun_mutex_);
-
+    if (lcd_output == nullptr) {
+      return;
+    }
     this->setTimeNSec(lcd_output->timestamp_);
     this->drawTf(map_ / odom_, lcd_output->Map_Pose_Odom_, 0.3, false);
 
@@ -579,8 +608,10 @@ class RerunVisualizer : public Visualizer3D,
     };
 
     CHECK(lcd_output);
+    bool has_loop = false;
     if (lcd_output->lcd_status_ == LCDStatus::LOOP_DETECTED or
         lcd_output->lcd_status_ == LCDStatus::LOOP_DETECTED_ROT) {
+      has_loop = true;
       std::string message;
       if (lcd_output->lcd_status_ == LCDStatus::LOOP_DETECTED_ROT) {
         for (int i = 0; i < lcd_output->relative_pose_.size(); ++i) {
@@ -632,9 +663,83 @@ class RerunVisualizer : public Visualizer3D,
 
       visualizeCovisGraph(lcd_output->covis_graph_, lcd_output->states_);
 
-      this->saveTUMTrajFile(
-          lcd_output->states_, lcd_output->timestamp_map_, "leSLAM");
+      std::vector<std::tuple<Key, Key, Pose3>> loops;
+      if (has_loop) {
+        for (size_t i = 0; i < lcd_output->id_match_.size(); ++i) {
+          loops.emplace_back(lcd_output->id_match_[i],
+                             lcd_output->id_recent_[i],
+                             lcd_output->relative_pose_[i]);
+        }
+
+        auto [nfg, optimized_values] =
+            optimizePoseGraph(pose_states_, lcd_output->covis_graph_, loops);
+        LOG(INFO) << "Optimized pose graph with " << optimized_values->size()
+                  << " states and " << nfg->size() << " factors.";
+
+        this->saveTUMTrajFile(
+            *optimized_values, lcd_output->timestamp_map_, "leSLAM");
+        this->drawFactors(map_ / "pgo" / "factors",
+                          *nfg,
+                          *optimized_values,
+                          getColorsFromFactorsType(*nfg),
+                          0.1f,
+                          false);
+        this->drawPoints(map_ / "pgo" / "traj",
+                         *optimized_values,
+                         {aria::viz::ColorMap::kBlue},
+                         {0.5});
+      }
     }
+  }
+
+  GraphAndValues optimizePoseGraph(
+      const Values& odom_values,
+      std::map<FrameId, FrameIdSet> covis_graph,
+      std::vector<std::tuple<Key, Key, Pose3>> loops) {
+    NonlinearFactorGraph::shared_ptr nfg(new NonlinearFactorGraph());
+    noiseModel::Isotropic::shared_ptr prior_noise =
+        noiseModel::Isotropic::Sigma(6, 0.001);
+    nfg->add(boost::make_shared<PriorFactor<Pose3>>(
+        odom_values.keys().at(0),
+        odom_values.at<Pose3>(odom_values.keys().at(0)),
+        prior_noise));
+    noiseModel::Diagonal::shared_ptr between_noise =
+        noiseModel::Diagonal::Sigmas(
+            (Vector(6) << Vector3::Constant(1), Vector3::Constant(3))
+                .finished());
+    // form the odometry factors from the odom_values and covis_graph
+    for (const auto& [key, neighbors] : covis_graph) {
+      for (const auto& neighbor : neighbors) {
+        if (key < neighbor) {
+          auto pose1 = odom_values.at<Pose3>(key);
+          auto pose2 = odom_values.at<Pose3>(neighbor);
+          auto rel_pose = pose1.between(pose2);
+          auto huber = noiseModel::Robust::Create(
+              noiseModel::mEstimator::Huber::Create(1.345), between_noise);
+          nfg->add(boost::make_shared<BetweenFactor<Pose3>>(
+              key, neighbor, rel_pose, huber));
+        } else {
+          continue;  // already added
+        }
+      }
+    }
+
+    // add loop closure
+    for (const auto& [key1, key2, rel_pose] : loops) {
+      auto huber = noiseModel::Robust::Create(
+          noiseModel::mEstimator::Huber::Create(1.345), between_noise);
+      nfg->add(boost::make_shared<BetweenFactor<Pose3>>(
+          key1, key2, rel_pose, huber));
+    }
+
+    Values initial = odom_values;
+    Values::shared_ptr result(new Values());
+    LevenbergMarquardtParams params;
+    params.setVerbosity("SILENT");
+    params.setMaxIterations(100);
+    LevenbergMarquardtOptimizer optimizer(*nfg, initial, params);
+    *result = optimizer.optimize();
+    return {nfg, result};
   }
 
   std::map<Timestamp, gtsam::Pose3> loadTrajectoryMapFromCSV(
@@ -698,8 +803,10 @@ class RerunVisualizer : public Visualizer3D,
 
   std::future<void> draw_gt_traj_future_;
   std::map<std::string, std::future<void>> save_traj_futures_;
+  std::future<void> lcd_output_future_;
 
   gtsam::Values smoother_states_;
+  gtsam::Values pose_states_;
 
   std::map<Timestamp, Pose3> gt_trajectory_;
   Pose3 T_map_gt_ = Pose3::Identity();
@@ -710,6 +817,9 @@ class RerunVisualizer : public Visualizer3D,
   PointsWithIdMap landmarks_in_odom_;
 
   FrameIDTimestampMap timestamp_map_;
+
+  std::optional<std::pair<FrameId, FrameId>> last_odom_pair_{std::nullopt};
+  ISAM2 isam2_;
 
   std::mutex rerun_mutex_;
 
