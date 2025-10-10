@@ -70,15 +70,19 @@ play-euroc-m4 = { cmd = "cd /datasets/euroc && rosbag play --clock -s 15 MH_04_d
 play-jackal = { cmd = "cd /datasets && rosbag play --clock -s 20 10_14_acl_jackal.bag" }
 play-square1-alpha = { cmd = "cd /datasets_extra/S3E/Square1 && rosbag play --clock -s 0 square1.bag" }
 play-square2-alpha = { cmd = "cd /datasets_extra/S3E/Square2 && rosbag play --clock -s 0 square2.bag" }
-play-graco8 = { cmd = "cd /datasets_extra/graco && rosbag play --clock -s 0 aerial-08-25m.bag" }
-play-graco7 = { cmd = "cd /datasets_extra/graco && rosbag play --clock -s 0 aerial-07-25m.bag" }
+play-graco-a8 = { cmd = "cd /datasets_extra/graco && rosbag play --clock -s 0 aerial-08-25m.bag" }
+play-graco-a7 = { cmd = "cd /datasets_extra/graco && rosbag play --clock -s 0 aerial-07-25m.bag" }
 play-graco-a5 = { cmd = "cd /datasets_extra/graco && rosbag play --clock -s 0 aerial-05-40m.bag" }
 play-graco-g1 = { cmd = "cd /datasets_extra/graco && rosbag play --clock -s 0 ground-01.bag" }
 play-graco-g2 = { cmd = "cd /datasets_extra/graco && rosbag play --clock -s 0 ground-02.bag" }
+play-graco-g3 = { cmd = "cd /datasets_extra/graco && rosbag play --clock -s 0 ground-03.bag" }
 play-hilti-01 = { cmd = "cd /datasets_extra/hilti && rosbag play --clock -s 0 exp01_construction_ground_level.bag" }
 play-hilti-04 = { cmd = "cd /datasets_extra/hilti && rosbag play --clock -s 0 exp04_construction_upper_level.bag" }
+play-hilti-05 = { cmd = "cd /datasets_extra/hilti && rosbag play --clock -s 0 exp05_construction_upper_level_2.bag" }
 play-hilti-06 = { cmd = "cd /datasets_extra/hilti && rosbag play --clock -s 0 exp06_construction_upper_level_3.bag" }
 play-hilti-09 = { cmd = "cd /datasets_extra/hilti && rosbag play --clock -s 0 exp09_cupola.bag" }
+play-hilti-10 = { cmd = "cd /datasets_extra/hilti && rosbag play --clock -s 0 exp10_cupola_2.bag" }
+play-hilti-14 = { cmd = "cd /datasets_extra/hilti && rosbag play --clock -s 0 exp14_basement_2.bag" }
 play-hilti-16 = { cmd = "cd /datasets_extra/hilti && rosbag play --clock -s 0 exp16_attic_to_upper_gallery_2.bag" }
 play-hilti-18 = { cmd = "cd /datasets_extra/hilti && rosbag play --clock -s 0 exp18_corridor_lower_gallery_2.bag" }
 play-fpv-out-fwd1 = { cmd = "cd /datasets_extra/fpv_racing && rosbag play --clock -s 25 outdoor_forward_1_snapdragon_with_gt.bag" }
@@ -95,92 +99,198 @@ download-onnx = { cmd = "wget https://codeload.github.com/microsoft/onnxruntime/
 jupyter = { cmd = "jupyter lab" }
 
 [tasks.evo-ape]
-cmd = "evo_ape tum /workspaces/src/Kimera-VIO-ROS/output_logs/{{ config }}/results/leSLAM.txt {{ gt }} -vap --plot_mode=xy --t_max_diff=0.2"
+cmd = "evo_ape tum {{ gt }} $KIMERA_OUTPUT_PATH/{{ config }}/results/{{ method }}.txt -vap --plot_mode=xy --t_max_diff=0.2 --save_results $KIMERA_OUTPUT_PATH/{{ config }}/results/{{ method }}.zip"
 args = [
   { "arg" = "config", "default" = "GrAcoMonoXfeat" },
   { "arg" = "gt", "default" = "/datasets_extra/graco/aerial-07-25m.txt" },
+  { "arg" = "method", "default" = "leSLAM" },
 ]
 
 [tasks.evo-rpe]
-cmd = "evo_rpe tum /workspaces/src/Kimera-VIO-ROS/output_logs/{{ config }}/results/leSLAM.txt {{ gt }} -vap --plot_mode=xy --delta=5 --delta_unit=m --t_max_diff=0.2"
+cmd = "evo_rpe tum {{ gt }}  $KIMERA_OUTPUT_PATH/{{ config }}/results/{{ method }}.txt -vap --plot_mode=xy --delta=5 --delta_unit=m --t_max_diff=0.2"
 args = [
   { "arg" = "config", "default" = "GrAcoMonoXfeat" },
   { "arg" = "gt", "default" = "/datasets_extra/graco/aerial-07-25m.txt" },
+  { "arg" = "method", "default" = "leSLAM" },
 ]
 
 [tasks.evo-traj]
-cmd = "evo_traj tum $KIMERA_OUTPUT_PATH/{{ config }}/results/leSLAM.txt --ref={{ gt }} -vap --plot_mode=xy --save_plot $KIMERA_OUTPUT_PATH/{{ config }}/results/evo.png --t_max_diff=0.2"
+cmd = "evo_traj tum $KIMERA_OUTPUT_PATH/{{ config }}/results/leVIO.txt $KIMERA_OUTPUT_PATH/{{ config }}/results/leSLAM.txt --ref={{ gt }} -vap --plot_mode=xy --save_plot $KIMERA_OUTPUT_PATH/{{ config }}/results/evo.png --t_max_diff=0.2"
 args = [
   { "arg" = "config", "default" = "GrAcoMonoXfeat/a7" },
   { "arg" = "gt", "default" = "/datasets_extra/graco/aerial-07-25m.txt" },
 ]
 
+[tasks.evo-graco-g1-all]
+cmd = "pixi run evo-ape {{ config }} {{ gt }} Kimera && pixi run evo-ape {{ config }} {{ gt }} ORB-SLAM3 && pixi run evo-ape {{ config }} {{ gt }} leVIO && pixi run evo-ape {{ config }} {{ gt }} VINS-Fusion && pixi run evo-ape {{ config }} {{ gt }} leSLAM && pixi run evo-ape {{ config }} {{ gt }} leVIO"
+args = [
+  { "arg" = "config", "default" = "GrAcoGndMonoXfeat/g1" },
+  { "arg" = "gt", "default" = "/datasets_extra/graco/g1/gt.txt" },
+]
 
-[tasks.evo-hilti-04]
-cmd = "pixi run evo-traj {{ config }} {{ gt }} && pixi run evo ape {{ config }} {{ gt }} && pixi run evo rpe {{ config }} {{ gt }}"
+[tasks.plot-graco-g2-all]
+cwd = "/workspaces/src/Kimera-VIO-ROS/output_logs/GrAcoGndMonoXfeat/g2/results"
+cmd = "evo_traj tum leVIO.txt leSLAM.txt ORB-SLAM3.txt VINS-Fusion.txt Kimera.txt leVIO.txt leSLAM.txt --ref={{ gt }} -vap --plot_mode=xy --save_plot evo_all.eps --t_max_diff=0.2"
+args = [
+  { "arg" = "config", "default" = "GrAcoGndMonoXfeat/g2" },
+  { "arg" = "gt", "default" = "/datasets_extra/graco/g2/gt.txt" },
+]
+
+[tasks.plot-graco-g1-all]
+cwd = "/workspaces/src/Kimera-VIO-ROS/output_logs/GrAcoGndMonoXfeat/g1/results"
+cmd = "evo_traj tum leVIO.txt leSLAM.txt ORB-SLAM3.txt VINS-Fusion.txt Kimera.txt --ref={{ gt }} -vap --plot_mode=xy --save_plot evo_all.eps --t_max_diff=0.2"
+args = [
+  { "arg" = "config", "default" = "GrAcoGndMonoXfeat/g1" },
+  { "arg" = "gt", "default" = "/datasets_extra/graco/g1/gt.txt" },
+]
+
+[tasks.plot-graco-a5-all]
+cwd = "/workspaces/src/Kimera-VIO-ROS/output_logs/GrAcoMonoXfeat/a5/results"
+cmd = "evo_traj tum leVIO.txt leSLAM.txt ORB-SLAM3.txt VINS-Fusion.txt Kimera.txt --ref={{ gt }} -vap --plot_mode=xy --save_plot a5.eps --t_max_diff=0.2"
+args = [
+  { "arg" = "config", "default" = "GrAcoMonoXfeat/a5" },
+  { "arg" = "gt", "default" = "/datasets_extra/graco/a5/gt.txt" },
+]
+
+[tasks.plot-graco-a7-all]
+cwd = "/workspaces/src/Kimera-VIO-ROS/output_logs/GrAcoMonoXfeat/a7/results"
+cmd = "evo_traj tum leVIO.txt leSLAM.txt ORB-SLAM3.txt VINS-Fusion.txt Kimera.txt --ref={{ gt }} -vap --plot_mode=xy --save_plot a7.eps --t_max_diff=0.2"
+args = [
+  { "arg" = "config", "default" = "GrAcoMonoXfeat/a7" },
+  { "arg" = "gt", "default" = "/datasets_extra/graco/a7/gt.txt" },
+]
+
+[tasks.plot-hilti-16-all]
+cwd = "/workspaces/src/Kimera-VIO-ROS/output_logs/HiltiMonoXfeat/16/results"
+cmd = "evo_traj tum leVIO.txt leSLAM.txt --ref={{ gt }} -vap --plot_mode=xyz --save_plot 16_xyz.eps --t_max_diff=0.2"
+args = [
+  { "arg" = "config", "default" = "HiltiMonoXfeat/16" },
+  { "arg" = "gt", "default" = "/datasets_extra/hilti/16/gt.txt" },
+]
+
+[tasks.plot-hilti-14-all]
+cwd = "/workspaces/src/Kimera-VIO-ROS/output_logs/HiltiMonoXfeat/14/results"
+cmd = "evo_traj tum leVIO.txt leSLAM.txt --ref={{ gt }} -vap --plot_mode=xy --save_plot 14.eps --t_max_diff=0.2"
+args = [
+  { "arg" = "config", "default" = "HiltiMonoXfeat/14" },
+  { "arg" = "gt", "default" = "/datasets_extra/hilti/14/gt.txt" },
+]
+
+[tasks.plot-hilti-10-all]
+cwd = "/workspaces/src/Kimera-VIO-ROS/output_logs/HiltiMonoXfeat/10/results"
+cmd = "evo_traj tum leVIO.txt leSLAM.txt -vp --plot_mode=xyz --save_plot 10.eps --t_max_diff=0.2"
+args = [
+  { "arg" = "config", "default" = "HiltiMonoXfeat/10" },
+  { "arg" = "gt", "default" = "/datasets_extra/hilti/10/gt.txt" },
+]
+
+[tasks.plot-hilti-04-all]
+cwd = "/workspaces/src/Kimera-VIO-ROS/output_logs/HiltiMonoXfeat/04/results"
+cmd = "evo_traj tum leVIO.txt leSLAM.txt VINS-Fusion\\(Stereo\\).txt Kimera\\(Mono\\).txt --ref={{ gt }} -vap --plot_mode=xy --save_plot 04.eps --t_max_diff=0.2"
 args = [
   { "arg" = "config", "default" = "HiltiMonoXfeat/04" },
-  { "arg" = "gt", "default" = "/datasets_extra/hilti/exp_04_construction_upper_level_imu.txt" },
+  { "arg" = "gt", "default" = "/datasets_extra/hilti/04/gt.txt" },
+]
+
+[tasks.plot-hilti-06-all]
+cwd = "/workspaces/src/Kimera-VIO-ROS/output_logs/HiltiMonoXfeat/06/results"
+cmd = "evo_traj tum leVIO.txt leSLAM.txt Kimera\\(Stereo\\).txt --ref={{ gt }} -vap --plot_mode=xy --save_plot 04.eps --t_max_diff=0.2"
+args = [
+  { "arg" = "config", "default" = "HiltiMonoXfeat/06" },
+  { "arg" = "gt", "default" = "/datasets_extra/hilti/06/gt.txt" },
+]
+
+[tasks.evo-hilti-04]
+cmd = "pixi run evo-traj {{ config }} {{ gt }} && pixi run evo-ape {{ config }} {{ gt }} leVIO && pixi run evo-ape {{ config }} {{ gt }} leSLAM && pixi run evo-rpe {{ config }} {{ gt }} leVIO && pixi run evo-rpe {{ config }} {{ gt }} leSLAM"
+args = [
+  { "arg" = "config", "default" = "HiltiMonoXfeat/04" },
+  { "arg" = "gt", "default" = "/datasets_extra/hilti/04/gt.txt" },
+]
+
+[tasks.plot-graco-g2-ablation]
+cwd = "/workspaces/src/Kimera-VIO-ROS/output_logs/GrAcoGndMonoXfeat/g2/results"
+cmd = "evo_traj tum \"leSLAM(no RM)\".txt leSLAM.txt Kimera.txt --ref={{ gt }} -vap --plot_mode=xy --save_plot 04_ablation.eps --t_max_diff=0.2 --n_to_align=100"
+args = [
+  { "arg" = "config", "default" = "GracoGndMonoXfeat/g2" },
+  { "arg" = "gt", "default" = "/datasets_extra/graco/g2/gt.txt" },
+]
+
+[tasks.evo-hilti-05]
+cmd = "pixi run evo-traj {{ config }} {{ gt }} && pixi run evo-ape {{ config }} {{ gt }} leVIO && pixi run evo-ape {{ config }} {{ gt }} leSLAM && pixi run evo-rpe {{ config }} {{ gt }} leVIO && pixi run evo-rpe {{ config }} {{ gt }} leSLAM"
+args = [
+  { "arg" = "config", "default" = "HiltiMonoXfeat/05" },
+  { "arg" = "gt", "default" = "/datasets_extra/hilti/exp_05_construction_upper_level_2_imu.txt" },
+]
+
+[tasks.evo-hilti-10]
+cmd = "pixi run evo-traj {{ config }} {{ gt }} && pixi run evo-ape {{ config }} {{ gt }} leVIO && pixi run evo-ape {{ config }} {{ gt }} leSLAM && pixi run evo-rpe {{ config }} {{ gt }} leVIO && pixi run evo-rpe {{ config }} {{ gt }} leSLAM"
+args = [
+  { "arg" = "config", "default" = "HiltiMonoXfeat/10" },
+  { "arg" = "gt", "default" = "/datasets_extra/hilti/exp10_cupola_2_imu_3dof.txt" },
+]
+
+[tasks.evo-hilti-14]
+cmd = "pixi run evo-traj {{ config }} {{ gt }} && pixi run evo-ape {{ config }} {{ gt }} leVIO && pixi run evo-ape {{ config }} {{ gt }} leSLAM && pixi run evo-rpe {{ config }} {{ gt }} leVIO && pixi run evo-rpe {{ config }} {{ gt }} leSLAM"
+args = [
+  { "arg" = "config", "default" = "HiltiMonoXfeat/14" },
+  { "arg" = "gt", "default" = "/datasets_extra/hilti/exp14_basement_2_imu.txt" },
 ]
 
 [tasks.evo-hilti-06]
-cmd = "pixi run evo-traj {{ config }} {{ gt }} && pixi run evo-ape {{ config }} {{ gt }} && pixi run evo-rpe {{ config }} {{ gt }}"
+cmd = "pixi run evo-traj {{ config }} {{ gt }} && pixi run evo-ape {{ config }} {{ gt }} leVIO && pixi run evo-ape {{ config }} {{ gt }} leSLAM && pixi run evo-rpe {{ config }} {{ gt }} leVIO && pixi run evo-rpe {{ config }} {{ gt }} leSLAM"
 args = [
   { "arg" = "config", "default" = "HiltiMonoXfeat/06" },
   { "arg" = "gt", "default" = "/datasets_extra/hilti/exp_06_construction_upper_level_3_imu.txt" },
 ]
 
 [tasks.evo-hilti-16]
-cmd = "pixi run evo-traj {{ config }} {{ gt }} && pixi run evo-ape {{ config }} {{ gt }} && pixi run evo-rpe {{ config }} {{ gt }}"
+cmd = "pixi run evo-traj {{ config }} {{ gt }} && pixi run evo-ape {{ config }} {{ gt }} leVIO && pixi run evo-ape {{ config }} {{ gt }} leSLAM && pixi run evo-rpe {{ config }} {{ gt }} leVIO && pixi run evo-rpe {{ config }} {{ gt }} leSLAM"
 args = [
   { "arg" = "config", "default" = "HiltiMonoXfeat/16" },
   { "arg" = "gt", "default" = "/datasets_extra/hilti/exp16_attic_to_upper_gallery_2_imu.txt" },
 ]
 
 [tasks.evo-graco-g1]
-cmd = "pixi run evo-traj {{ config }} {{ gt }} && pixi run evo-ape {{ config }} {{ gt }} && pixi run evo-rpe {{ config }} {{ gt }}"
+cmd = "pixi run evo-traj {{ config }} {{ gt }} && pixi run evo-ape {{ config }} {{ gt }} leVIO && pixi run evo-ape {{ config }} {{ gt }} leSLAM && pixi run evo-rpe {{ config }} {{ gt }} leVIO && pixi run evo-rpe {{ config }} {{ gt }} leSLAM"
 args = [
   { "arg" = "config", "default" = "GrAcoGndMonoXfeat/g1" },
-  { "arg" = "gt", "default" = "/datasets_extra/graco/ground-01.txt" },
+  { "arg" = "gt", "default" = "/datasets_extra/graco/g1/gt.txt" },
 ]
 
 [tasks.evo-graco-g2]
-cmd = "pixi run evo-traj {{ config }} {{ gt }} && pixi run evo-ape {{ config }} {{ gt }} && pixi run evo-rpe {{ config }} {{ gt }}"
+cmd = "pixi run evo-traj {{ config }} {{ gt }} && pixi run evo-ape {{ config }} {{ gt }} leVIO && pixi run evo-ape {{ config }} {{ gt }} leSLAM && pixi run evo-rpe {{ config }} {{ gt }} leVIO && pixi run evo-rpe {{ config }} {{ gt }} leSLAM"
 args = [
   { "arg" = "config", "default" = "GrAcoGndMonoXfeat/g2" },
-  { "arg" = "gt", "default" = "/datasets_extra/graco/ground-02.txt" },
+  { "arg" = "gt", "default" = "/datasets_extra/graco/g2/gt.txt" },
 ]
 
+[tasks.evo-graco-g3]
+cmd = "pixi run evo-traj {{ config }} {{ gt }} && pixi run evo-ape {{ config }} {{ gt }} leVIO && pixi run evo-ape {{ config }} {{ gt }} leSLAM && pixi run evo-rpe {{ config }} {{ gt }} leVIO && pixi run evo-rpe {{ config }} {{ gt }} leSLAM"
+args = [
+  { "arg" = "config", "default" = "GrAcoGndMonoXfeat/g3" },
+  { "arg" = "gt", "default" = "/datasets_extra/graco/ground-03.txt" },
+]
+
+
 [tasks.evo-graco-a5]
-cmd = "pixi run evo-traj {{ config }} {{ gt }} && pixi run evo-ape {{ config }} {{ gt }} && pixi run evo-rpe {{ config }} {{ gt }}"
+cmd = "pixi run evo-traj {{ config }} {{ gt }} && pixi run evo-ape {{ config }} {{ gt }} leVIO && pixi run evo-ape {{ config }} {{ gt }} leSLAM && pixi run evo-rpe {{ config }} {{ gt }} leVIO && pixi run evo-rpe {{ config }} {{ gt }} leSLAM"
 args = [
   { "arg" = "config", "default" = "GrAcoMonoXfeat/a5" },
-  { "arg" = "gt", "default" = "/datasets_extra/graco/aerial-05-40m.txt" },
+  { "arg" = "gt", "default" = "/datasets_extra/graco/a5/gt.txt" },
 ]
 
 [tasks.evo-graco-a7]
-cmd = "pixi run evo-traj {{ config }} {{ gt }} && pixi run evo-ape {{ config }} {{ gt }} && pixi run evo-rpe {{ config }} {{ gt }}"
+cmd = "pixi run evo-traj {{ config }} {{ gt }} && pixi run evo-ape {{ config }} {{ gt }} leVIO && pixi run evo-ape {{ config }} {{ gt }} leSLAM && pixi run evo-rpe {{ config }} {{ gt }} leVIO && pixi run evo-rpe {{ config }} {{ gt }} leSLAM"
 args = [
   { "arg" = "config", "default" = "GrAcoMonoXfeat/a7" },
   { "arg" = "gt", "default" = "/datasets_extra/graco/aerial-07-25m.txt" },
 ]
 
 [tasks.evo-graco-a8]
-depends-on = [
-  { "task" = "evo-traj", "args" = [
-    "GrAcoMonoXfeat/a8",
-    "/datasets_extra/graco/aerial-08-25m.txt",
-  ] },
-  { "task" = "evo", "args" = [
-    "ape",
-    "GrAcoMonoXfeat/a8",
-    "/datasets_extra/graco/aerial-08-25m.txt",
-  ] },
-  { "task" = "evo", "args" = [
-    "rpe",
-    "GrAcoMonoXfeat/a8",
-    "/datasets_extra/graco/aerial-08-25m.txt",
-  ] },
+cmd = "pixi run evo-traj {{ config }} {{ gt }} && pixi run evo-ape {{ config }} {{ gt }} leVIO && pixi run evo-ape {{ config }} {{ gt }} leSLAM && pixi run evo-rpe {{ config }} {{ gt }} leVIO && pixi run evo-rpe {{ config }} {{ gt }} leSLAM"
+args = [
+  { "arg" = "config", "default" = "GrAcoMonoXfeat/a8" },
+  { "arg" = "gt", "default" = "/datasets_extra/graco/a8/gt.txt" },
 ]
 
 [tasks.evo-euroc-m2]
@@ -391,10 +501,14 @@ cmd = [
 
 [dependencies]
 python = "3.11.*"
-evo = ">=1.31.1,<2"
 pip = ">=25.2,<26"
 empy = ">=3.3.4,<4"
 catkin_pkg = ">=1.0.0,<2"
+gtsam = ">=4.2.0,<5"
+pycryptodomex = ">=3.23.0,<4"
+gnupg = ">=2.5.12,<3"
+rospkg = ">=1.6.0,<2"
+pyqt = ">=5.15.11,<6"
 # git = "*"
 # cmake = "<4"
 

@@ -257,10 +257,22 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
     cv::Mat tracking_image_clone =
         input.frontend_output_->getTrackingImage()->clone();
 
+    auto K = input.frontend_output_->getTrackingFrame()->cam_param_.K_;
+
+    // only draw every 3 frames
+    // if (input.backend_output_->cur_kf_id_ % 3 == 0) {
+    //   this->drawCamera(input.backend_output_->cur_kf_id_,
+    //                    input.backend_output_->W_State_Blkf_.pose_,
+    //                    tracking_image_clone,
+    //                    K,
+    //                    false);
+    // }
+
     if (not input.frontend_output_->getTrackingImage()->empty()) {
-      this->drawImage(map_ / odom_ / baselink_ / "tracking" / "image",
-                      tracking_image_clone,
-                      false);
+      cv::Mat small_image;
+      cv::resize(tracking_image_clone, small_image, cv::Size(), 0.5, 0.5);
+      this->drawImage(
+          map_ / odom_ / baselink_ / "tracking" / "image", small_image, false);
     }
 
     Landmarks lmks_vec;
@@ -286,8 +298,8 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
     Pose3 T_odom_pose = odom_states_.at<Pose3>(earliest_frame);
     Pose3 W_T_smoother = T_odom_pose * T_smoother_pose.inverse();
 
+    smoother_states_.clear();
     smoother_states_.insert_or_assign(input.backend_output_->state_);
-
     visualizeLandmarks(
         map_ / odom_ / "smoother", lmks_vec, aria::viz::ColorMap::kRed);
     drawTf(map_ / odom_ / "smoother", W_T_smoother);
@@ -295,6 +307,7 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
                input.backend_output_->state_,
                {aria::viz::ColorMap::kRed},
                {0.5});
+    pose_states_.clear();
     for (const auto& key : smoother_states_.keys()) {
       Symbol symbol(key);
       if (symbol.chr() == kPoseSymbolChar) {
@@ -302,33 +315,64 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
                                       smoother_states_.at<Pose3>(key));
       }
     }
-    drawPoints(map_ / odom_ / "smoother" / "traj",
-               pose_states_,
-               {aria::viz::ColorMap::kBlue},
-               {0.5});
 
     // Check if it's time to save trajectories (every 10 seconds)
-    this->checkAndSaveTrajectories(pose_states_);
+    this->checkAndSaveTrajectories(odom_states_);
 
-    // Launch LCD output processing asynchronously
-    // Check if previous LCD processing is still running
-    if (lcd_output_future_.valid() &&
-        lcd_output_future_.wait_for(std::chrono::seconds(0)) !=
-            std::future_status::ready) {
-      // Previous LCD processing is still running, skip this frame's LCD output
-    } else {
-      // Clean up previous future if it's ready
-      if (lcd_output_future_.valid()) {
-        lcd_output_future_.get();  // This will clean up the completed future
-      }
-      // Launch new async LCD output processing
-      lcd_output_future_ = std::async(std::launch::async,
-                                      &RerunVisualizer::publishLcdOutput,
-                                      this,
-                                      input.lcd_output_);
-    }
+    this->publishLcdOutput(input.lcd_output_);
 
     return std::make_unique<VIO::VisualizerOutput>();
+  }
+
+  void drawCamera(int id,
+                  const Pose3& cam_pose,
+                  const cv::Mat& image,
+                  const cv::Mat& K,
+                  bool is_static = true) {
+    // draw the tf for this camera
+    std::string cam_name = fmt::format("f{}", id);
+    this->drawTf(map_ / odom_ / "camera" / cam_name, cam_pose, 0, is_static);
+
+    if (not image.empty()) {
+      cv::Mat rgba32;
+      if (image.type() == CV_8UC3) {
+        cv::cvtColor(image, rgba32, cv::COLOR_BGR2RGBA);
+      } else if (image.type() == CV_8UC1) {
+        cv::cvtColor(image, rgba32, cv::COLOR_GRAY2RGBA);
+      } else if (image.type() == CV_8UC4) {
+        rgba32 = image;
+      } else {
+        throw std::runtime_error("Unsupported image type");
+      }
+      std::array<float, 9> K_vec = {
+          static_cast<float>(K.at<double>(0, 0)),  // fx
+          0.f,
+          static_cast<float>(K.at<double>(0, 2)),  // cx
+          0.f,
+          static_cast<float>(K.at<double>(1, 1)),  // fy
+          static_cast<float>(K.at<double>(1, 2)),  // cy
+          0.f,
+          0.f,
+          1.f};
+      rerun::components::PinholeProjection pp(K_vec);
+
+      this->rec()->log_with_static(
+          (map_ / odom_ / "camera" / cam_name).c_str(),
+          is_static,
+          rerun::Image::from_rgba32(rgba32,
+                                    {static_cast<uint32_t>(image.cols),
+                                     static_cast<uint32_t>(image.rows)}));
+      // draw the camera
+      this->rec()->log_with_static(
+          (map_ / odom_ / "camera" / cam_name).c_str(),
+          is_static,
+          rerun::Pinhole::from_focal_length_and_resolution(
+              K_vec[0],
+              {static_cast<float>(image.cols), static_cast<float>(image.rows)})
+              .with_image_plane_distance(0.1f)
+              .with_camera_xyz(rerun::components::ViewCoordinates::FRD));
+      // .with_image_from_camera(pp));
+    }
   }
 
   void drawGtTraj(gtsam::Values est_traj_values,
@@ -428,8 +472,12 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
 
     auto gray = aria::viz::ColorMap::kGray;
 
-    this->drawFactors(
-        map_ / "covis_graph", symbolic_graph, states, gray, 1.f, false);
+    this->drawFactors(map_ / "covis_graph",
+                      symbolic_graph,
+                      states,
+                      aria::viz::ColorMap::kGreen,
+                      1.f,
+                      false);
   }
 
   void visualizeLCDQueryAndCandidates(FrameId query_id,
@@ -462,7 +510,7 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
     auto current_time = std::chrono::steady_clock::now();
     if (current_time - last_save_time_ >= save_interval_) {
       if (!states.empty() && !timestamp_map_.empty()) {
-        this->saveTUMTrajFile(states, timestamp_map_, "leVIO");
+        this->saveTUMTrajFile(states, timestamp_map_, "DE-VIO");
       }
       last_save_time_ = current_time;
     }
@@ -470,7 +518,7 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
 
   void forceSaveTrajectories() {
     if (!odom_states_.empty() && !timestamp_map_.empty()) {
-      this->saveTUMTrajFile(odom_states_, timestamp_map_, "leVIO");
+      this->saveTUMTrajFile(odom_states_, timestamp_map_, "DE-VIO");
     }
     last_save_time_ = std::chrono::steady_clock::now();
   }
@@ -548,8 +596,8 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
       if (keys.size() > 2) continue;
       uint64_t diff =
           (keys[0] > keys[1]) ? (keys[0] - keys[1]) : (keys[1] - keys[0]);
-      if (diff == 1 or keys.size() == 1) {  // odometry edge
-        colors[i] = aria::viz::ColorMap::kBlue;
+      if (diff == 1 or keys.size() == 1) {                // odometry edge
+        colors[i] = Eigen::Vector4f(255, 255, 0.0, 255);  // yellow
         continue;
       } else if (diff > 1 and keys.size() == 2) {  // loop closure edge
         auto between_factor =
@@ -647,7 +695,7 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
     }
 
     visualizeLandmarks(
-        map_ / odom_, lcd_output->landmarks_, aria::viz::ColorMap::kBlack);
+        map_ / odom_, lcd_output->landmarks_, Eigen::Vector4f(255, 255, 255, 150));
     visualizeLCDQueryAndCandidates(lcd_output->query_frame_,
                                    lcd_output->global_candidates_,
                                    lcd_output->states_);
@@ -670,19 +718,21 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
                              lcd_output->id_recent_[i],
                              lcd_output->relative_pose_[i]);
         }
+      }
 
-        auto [nfg, optimized_values] =
-            optimizePoseGraph(pose_states_, lcd_output->covis_graph_, loops);
-        LOG(INFO) << "Optimized pose graph with " << optimized_values->size()
-                  << " states and " << nfg->size() << " factors.";
+      // this->saveTUMTrajFile(
+      // lcd_output->states_, lcd_output->timestamp_map_, "leSLAM");
 
+      auto [nfg, optimized_values] =
+          optimizePoseGraph(pose_states_, lcd_output->covis_graph_, loops);
+      if (nfg) {
         this->saveTUMTrajFile(
-            *optimized_values, lcd_output->timestamp_map_, "leSLAM");
+            *optimized_values, lcd_output->timestamp_map_, "DE-SLAM");
         this->drawFactors(map_ / "pgo" / "factors",
                           *nfg,
                           *optimized_values,
                           getColorsFromFactorsType(*nfg),
-                          0.1f,
+                          1.f,
                           false);
         this->drawPoints(map_ / "pgo" / "traj",
                          *optimized_values,
@@ -696,49 +746,107 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
       const Values& odom_values,
       std::map<FrameId, FrameIdSet> covis_graph,
       std::vector<std::tuple<Key, Key, Pose3>> loops) {
-    NonlinearFactorGraph::shared_ptr nfg(new NonlinearFactorGraph());
-    noiseModel::Isotropic::shared_ptr prior_noise =
-        noiseModel::Isotropic::Sigma(6, 0.001);
-    nfg->add(boost::make_shared<PriorFactor<Pose3>>(
-        odom_values.keys().at(0),
-        odom_values.at<Pose3>(odom_values.keys().at(0)),
-        prior_noise));
-    noiseModel::Diagonal::shared_ptr between_noise =
-        noiseModel::Diagonal::Sigmas(
-            (Vector(6) << Vector3::Constant(1), Vector3::Constant(3))
-                .finished());
-    // form the odometry factors from the odom_values and covis_graph
-    for (const auto& [key, neighbors] : covis_graph) {
-      for (const auto& neighbor : neighbors) {
-        if (key < neighbor) {
-          auto pose1 = odom_values.at<Pose3>(key);
-          auto pose2 = odom_values.at<Pose3>(neighbor);
-          auto rel_pose = pose1.between(pose2);
-          auto huber = noiseModel::Robust::Create(
-              noiseModel::mEstimator::Huber::Create(1.345), between_noise);
-          nfg->add(boost::make_shared<BetweenFactor<Pose3>>(
-              key, neighbor, rel_pose, huber));
-        } else {
-          continue;  // already added
+    Values::shared_ptr result(new Values(odom_values));
+    // find the earliest two pose keys in odom_values
+    FrameId first_frame = std::numeric_limits<FrameId>::max();
+    FrameId second_frame = std::numeric_limits<FrameId>::max();
+    for (auto key : odom_values.keys()) {
+      auto frame_id = key;
+      if (frame_id < first_frame) {
+        second_frame = first_frame;
+        first_frame = frame_id;
+      } else if (frame_id < second_frame && frame_id != first_frame) {
+        second_frame = frame_id;
+      }
+    }
+
+    if (first_frame == std::numeric_limits<FrameId>::max() or
+        second_frame == std::numeric_limits<FrameId>::max()) {
+      LOG(WARNING) << "Not enough poses to optimize.";
+      return {nullptr, result};
+    }
+
+    NonlinearFactorGraph::shared_ptr nfg(new NonlinearFactorGraph);
+
+    if (not last_odom_pair_) {
+      // add prior
+      auto prior_noise = noiseModel::Diagonal::Sigmas(
+          (Vector(6) << Vector3::Constant(1e-6), Vector3::Constant(1e-6))
+              .finished());
+      nfg->add(boost::make_shared<PriorFactor<Pose3>>(
+          first_frame, odom_values.at<Pose3>(first_frame), prior_noise));
+    }
+
+    // add odometry factors
+    auto noise = noiseModel::Diagonal::Sigmas(
+        (Vector(6) << Vector3::Constant(1), Vector3::Constant(3)).finished());
+    auto huber = noiseModel::Robust::Create(
+        noiseModel::mEstimator::Huber::Create(1.345), noise);
+    // add all states in odom values as between factors
+    for (const auto& key : odom_values.keys()) {
+      auto next_key = key + 1;
+      if (odom_values.exists(next_key)) {
+        auto rel_pose =
+            odom_values.at<Pose3>(key).between(odom_values.at<Pose3>(next_key));
+        nfg->add(boost::make_shared<BetweenFactor<Pose3>>(
+            key, next_key, rel_pose, huber));
+      }
+    }
+
+    // remove old odom factors
+    FactorIndices to_remove;
+    for (size_t i = 0; i < nfg->size(); ++i) {
+      auto key0 = nfg->at(i)->keys()[0];
+      auto key1 = nfg->at(i)->keys()[1];
+      auto factors_it = isam2_.getVariableIndex().find(key0);
+      if (factors_it != isam2_.getVariableIndex().end()) {
+        auto& factor_indices = factors_it->second;
+        for (const auto& factor_index : factor_indices) {
+          auto factor = isam2_.getFactorsUnsafe().at(factor_index);
+          if (factor->keys().size() == 2 and
+              ((factor->keys()[0] == key0 and factor->keys()[1] == key1) or
+               (factor->keys()[0] == key1 and factor->keys()[1] == key0))) {
+            to_remove.push_back(factor_index);
+          }
         }
       }
     }
 
-    // add loop closure
+    // add loop closure factors
     for (const auto& [key1, key2, rel_pose] : loops) {
-      auto huber = noiseModel::Robust::Create(
-          noiseModel::mEstimator::Huber::Create(1.345), between_noise);
-      nfg->add(boost::make_shared<BetweenFactor<Pose3>>(
-          key1, key2, rel_pose, huber));
+      if ((isam2_.valueExists(key1) and isam2_.valueExists(key2)) or
+          (odom_values.exists(key1) and odom_values.exists(key2))) {
+        nfg->add(boost::make_shared<BetweenFactor<Pose3>>(
+            key1, key2, rel_pose, huber));
+      } else {
+        LOG(FATAL) << "Loop closure keys not in odom values: " << key1 << " or "
+                   << key2;
+      }
     }
 
-    Values initial = odom_values;
-    Values::shared_ptr result(new Values());
-    LevenbergMarquardtParams params;
-    params.setVerbosity("SILENT");
-    params.setMaxIterations(100);
-    LevenbergMarquardtOptimizer optimizer(*nfg, initial, params);
-    *result = optimizer.optimize();
+    gtsam::Values new_theta;
+    for (const auto& key : odom_values.keys()) {
+      if (not isam2_.valueExists(key)) {
+        new_theta.insert(key, odom_values.at<Pose3>(key));
+      }
+    }
+
+    try {
+      isam2_.update(*nfg, new_theta, to_remove);
+    } catch (const std::exception& e) {
+      LOG(ERROR) << "ISAM2 update failed: " << e.what();
+      isam2_.getFactorsUnsafe().print("Current ISAM2 factors:");
+      nfg->print("New factors to add:");
+      odom_values.print("Odom values:");
+      throw;
+    }
+
+    *result = isam2_.calculateBestEstimate();
+
+    last_odom_pair_ = std::make_pair(first_frame, second_frame);
+
+    *nfg = isam2_.getFactorsUnsafe();
+
     return {nfg, result};
   }
 
