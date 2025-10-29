@@ -339,7 +339,7 @@ void RosLoopClosureVisualizer::publishPoseGraph(
         pose_graph_nodes_.at(pose_graph_nodes_.size() - 2));
     incremental_graph.nodes.push_back(
         pose_graph_nodes_.at(pose_graph_nodes_.size() - 1));
-    if (lcd_output->lcd_status_ == LCDStatus::LOOP_DETECTED) {
+      if (lcd_output->is_loop_closure_) {
       // Not directly taking the last lc_edge to bypass kimera-rpgo
       gtsam::Pose3 lc_transform = lcd_output->relative_pose_;
       pose_graph_tools_msgs::PoseGraphEdge last_lc_edge;

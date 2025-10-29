@@ -7,6 +7,11 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(catkin_simple REQUIRED)
 
+# Eigen is header-only but some dependent targets export the imported Eigen target
+# as an INTERFACE link. Ensure Eigen3 target is defined in this configuration so
+# linking doesn't turn 'Eigen3::Eigen' into a raw '-lEigen3::Eigen'.
+find_package(Eigen3 REQUIRED)
+
 find_package(rerun_sdk REQUIRED)
 find_package(aria_common REQUIRED)
 find_package(aria_viz REQUIRED)
@@ -61,10 +66,14 @@ cs_add_executable(csv_publisher_node
 )
 target_link_libraries(csv_publisher_node ${PROJECT_NAME})
 
-catkin_add_gtest(testKimeraVioRos
-  test/testKimeraVioRos.cpp
-)
-target_link_libraries(testKimeraVioRos ${PROJECT_NAME})
+if(CATKIN_ENABLE_TESTING)
+  catkin_add_gtest(testKimeraVioRos
+    test/testKimeraVioRos.cpp
+  )
+  target_link_libraries(testKimeraVioRos ${PROJECT_NAME})
+else()
+  message(STATUS "Skipping test target 'testKimeraVioRos' because CATKIN_ENABLE_TESTING is OFF")
+endif()
 
 cs_install()
 

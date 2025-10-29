@@ -89,8 +89,10 @@ class RerunVisualizer : public Visualizer3D,
         baselink_(base_link_frame_id),
         map_(map_frame_id),
         odom_(odom_frame_id) {
-    // draw the origin frame for visualization
-    this->drawTf(map_, Pose3::Identity(), 0.3, true);
+  // draw the origin frame for visualization
+  // Use default-constructed Pose3 (identity) to avoid relying on
+  // Pose3::Identity() which may not exist in the installed GTSAM
+  this->drawTf(map_, Pose3(), 0.3, true);
 
     if (not g_custom_sink) {
       AddGlogCustomSink([this](google::LogSeverity severity,
@@ -264,7 +266,9 @@ class RerunVisualizer : public Visualizer3D,
     };
 
     CHECK(lcd_output);
-    if (lcd_output->lcd_status_ == LCDStatus::LOOP_DETECTED) {
+    // Kimera-VIO's LcdOutput no longer contains a lcd_status_ enum member
+    // in recent versions; use the boolean flag `is_loop_closure_` instead.
+    if (lcd_output->is_loop_closure_) {
       std::string message =
           fmt::format("Loop closure detected: {} -> {}: {}",
                       lcd_output->id_match_,
@@ -280,9 +284,7 @@ class RerunVisualizer : public Visualizer3D,
                       fmt::format("lcd_{}.g2o", lcd_output->timestamp_));
 
     } else {
-      std::string message =
-          fmt::format("No loop closure detected: status {}",
-                      LoopResult::asString(lcd_output->lcd_status_));
+      std::string message = fmt::format("No loop closure detected");
       this->rec()->log(
           "lcd_log",
           rerun::TextLog(message).with_level(rerun::TextLogLevel::Warning));
