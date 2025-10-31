@@ -394,7 +394,7 @@ void RosLoopClosureVisualizer::processBowQuery() {
   for (auto it = frames_.back().bow_vec_.begin();
        it != frames_.back().bow_vec_.end();
        ++it) {
-    bow_vec_msg.word_ids.push_back(it->first);
+    // bow_vec_msg.word_ids.push_back(it->first);
     bow_vec_msg.word_values.push_back(it->second);
   }
   pose_graph_tools_msgs::BowQuery bow_msg;

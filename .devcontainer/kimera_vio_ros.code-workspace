@@ -22,9 +22,6 @@
 			"path": "../../accelerated_features"
 		},
 		{
-			"path": "../../kimera_xfeat_docker"
-		},
-		{
 			"path": "../../vio-factors"
 		},
 		{
@@ -32,6 +29,9 @@
 		},
 		{
 			"path": "../../gtsam"
+		},
+		{
+			"path": "../../Kimera-Distributed"
 		}
 	],
 	"settings": {}
