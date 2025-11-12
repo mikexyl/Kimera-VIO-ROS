@@ -85,7 +85,8 @@ class RerunVisualizer : public Visualizer3D,
         aria::viz::VisualizerRerun(aria::viz::VisualizerRerun::Params(
             "kimera_vio",
             recording_id,
-            "rerun+http://172.17.0.1:9876/proxy")),
+            "rerun+http://host.docker.internal:9876/proxy",
+            0.1f)),  // 100ms flush timeout to prevent memory buildup
         baselink_(base_link_frame_id),
         map_(map_frame_id),
         odom_(odom_frame_id) {
@@ -155,6 +156,12 @@ class RerunVisualizer : public Visualizer3D,
                        const char* filename,
                        int line,
                        const char* message) {
+    // Only forward WARNING and above to Rerun to prevent memory explosion
+    // from thousands of INFO messages per second
+    if (severity < google::GLOG_WARNING) {
+      return;
+    }
+
     // glog severity to Rerun log level
     rerun::TextLogLevel level;
     switch (severity) {

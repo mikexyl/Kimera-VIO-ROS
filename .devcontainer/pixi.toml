@@ -9,8 +9,6 @@ version = "0.1.0"
 scripts = ["/opt/ros/noetic/setup.sh", "devel/setup.sh"]
 
 [activation.env]
-# LD_LIBRARY_PATH = "$LD_LIBRARY_PATH:/usr/local/lib:${PIXI_PROJECT_ROOT}/.pixi/envs/${PIXI_ENVIRONMENT_NAME}/lib"
-FAISS_CMAKE_ARGS = "-DFAISS_ENABLE_GPU=ON -DFAISS_ENABLE_PYTHON=ON -DFAISS_ENABLE_CUVS=ON -Dcuvs_DIR=/workspaces/.pixi/envs/default/lib/cmake/cuvs -DBUILD_TESTING=OFF"
 LIBGL_ALWAYS_SOFTWARE = "1"
 
 
@@ -28,8 +26,7 @@ config = { cmd = [
   "-DCMAKE_C_COMPILER=gcc",
   "-DCMAKE_CXX_COMPILER=g++",
   "-DKIMERA_BUILD_TESTS=OFF",
-  "-Donnxruntime_DIR=/workspaces/src/onnxruntime-linux-x64-gpu-1.22.0",
-  "-DCUBLAS_DIR=/usr/local/cuda",
+  "-Donnxruntime_DIR=/workspaces/src/onnxruntime-linux-x64-cpu-1.22.0", # Replaced GPU version with CPU version
   "-Dfaiss_DIR=/workspaces/src/faiss/build",
 ] }
 build-gtsam = { cmd = "cd src/gtsam && mkdir -p build && cd build && cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=1 -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Release -DGTSAM_USE_SYSTEM_METIS=ON -DGTSAM_BUILD_UNSTABLE=ON -DGTSAM_USE_SYSTEM_EIGEN=ON -DGTSAM_POSE3_EXPMAP=ON -DGTSAM_ROT3_EXPMAP=ON -DGTSAM_TANGENT_PREINTEGRATION=OFF -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja -DGTSAM_BUILD_TESTS=OFF -DGTSAM_BUILD_EXAMPLES_ALWAYS=OFF .. && ninja && sudo ninja install" }
@@ -140,7 +137,5 @@ swig = ">=4.3.1,<5"
 pip = ">=25.1.1,<26"
 onnxruntime = ">=1.22.0,<2"
 tqdm = ">=4.67.1,<5"
-
-
-[system-requirements]
-cuda = "12"
+catkin_pkg = ">=1.0.0,<2"
+empy = ">=3.3.4,<4"
