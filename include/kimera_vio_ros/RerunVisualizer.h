@@ -209,7 +209,7 @@ class RerunVisualizer : public Visualizer3D,
     if (not input.frontend_output_->getTrackingImage()->empty()) {
       this->drawImage(map_ / odom_ / baselink_ / "tracking_image",
                       tracking_image_clone,
-                      true);
+                      false);
     }
 
     // visualizeGraphInSmoother(input);
