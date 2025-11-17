@@ -18,6 +18,9 @@ find_package(aria_viz REQUIRED)
 find_package(spdlog REQUIRED)
 find_package(yaml-cpp REQUIRED)
 
+# GeographicLib is required by kimera_vio (which uses gtsam_unstable)
+find_package(GeographicLib REQUIRED)
+
 ### System Dependencies
 find_package(Boost REQUIRED COMPONENTS
   serialization system filesystem thread date_time regex timer chrono)
