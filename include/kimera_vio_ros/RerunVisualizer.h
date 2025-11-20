@@ -156,10 +156,14 @@ class RerunVisualizer : public Visualizer3D,
                        const char* filename,
                        int line,
                        const char* message) {
-    // Only forward WARNING and above to Rerun to prevent memory explosion
-    // from thousands of INFO messages per second
-    if (severity < google::GLOG_WARNING) {
-      return;
+    // Forward WARNING and above to Rerun for critical debugging
+    // INFO messages that contain "Factor Graph Debug Info" are also forwarded
+    // to capture optimization failure details
+    bool is_debug_info = (severity == google::GLOG_INFO && 
+                         std::string(message).find("Factor Graph") != std::string::npos);
+    
+    if (severity < google::GLOG_WARNING && !is_debug_info) {
+      return;  // Skip regular INFO messages to prevent memory explosion
     }
 
     // glog severity to Rerun log level
@@ -178,13 +182,13 @@ class RerunVisualizer : public Visualizer3D,
         level = rerun::TextLogLevel::Critical;
         break;
       default:
-        level = rerun::TextLogLevel::Debug;  // Default to Debug for other
-                                             // severities
+        level = rerun::TextLogLevel::Debug;
     }
 
-    // Forward glog messages to Rerun
+    // Forward glog messages to Rerun with context
+    std::string log_message = fmt::format("[{}:{}] {}", filename, line, message);
     this->rec()->log(
-        "glog", rerun::TextLog(fmt::format("{}", message)).with_level(level));
+        "glog", rerun::TextLog(log_message).with_level(level));
   }
 
   VIO::VisualizerOutput::UniquePtr spinOnce(
