@@ -248,10 +248,12 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
                          false);
 
     auto cur_cov = input.backend_output_->state_covariance_lkf_;
+    auto half_green = aria::viz::ColorMap::kGreen;
+    half_green[3] = 128;
     this->drawUncertainty(map_ / odom_ / baselink_ / "covariance",
                           Pose3::Identity(),
-                          cur_cov.block<3, 3>(0, 0),
-                          aria::viz::ColorMap::kGreen,
+                          cur_cov.block<3, 3>(3, 3),
+                          half_green,
                           0.1);
 
     cv::Mat tracking_image_clone =
@@ -270,9 +272,14 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
 
     if (not input.frontend_output_->getTrackingImage()->empty()) {
       cv::Mat small_image;
-      cv::resize(tracking_image_clone, small_image, cv::Size(), 0.5, 0.5);
-      this->drawImage(
-          map_ / odom_ / baselink_ / "tracking" / "image", small_image, false);
+      // resize to width 320 while keeping aspect ratio
+      double aspect_ratio = static_cast<double>(tracking_image_clone.cols) /
+                            static_cast<double>(tracking_image_clone.rows);
+      int new_width = 320;
+      int new_height = static_cast<int>(new_width / aspect_ratio);
+      cv::resize(
+          tracking_image_clone, small_image, cv::Size(new_width, new_height));
+      this->drawImage("tracking/image", small_image, false);
     }
 
     Landmarks lmks_vec;
@@ -314,6 +321,42 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
         pose_states_.insert_or_assign(symbol.index(),
                                       smoother_states_.at<Pose3>(key));
       }
+    }
+
+    if (auto stereo_output = std::dynamic_pointer_cast<StereoFrontendOutput>(
+            input.frontend_output_)) {
+      // visualize the disparity map if available
+      if (!stereo_output->stereo_frame_lkf_.left_disp_img_.empty()) {
+        // Convert disparity to grayscale 8-bit image (clip to 0-255, no
+        // normalization)
+        cv::Mat disp_gray;
+        stereo_output->stereo_frame_lkf_.left_disp_img_.convertTo(disp_gray,
+                                                                  CV_8U);
+
+        // resize to width 320 while keeping aspect ratio
+        double aspect_ratio = static_cast<double>(disp_gray.cols) /
+                              static_cast<double>(disp_gray.rows);
+        int new_width = 320;
+        int new_height = static_cast<int>(new_width / aspect_ratio);
+        cv::resize(disp_gray, disp_gray, cv::Size(new_width, new_height));
+
+        this->drawImage("stereo/disp_map", disp_gray, false);
+      }
+
+      auto depth_image = stereo_output->stereo_frame_lkf_.left_depth_img_;
+      // resize to width 320 while keeping aspect ratio
+      double aspect_ratio = static_cast<double>(depth_image.cols) /
+                            static_cast<double>(depth_image.rows);
+      int new_width = 320;
+      int new_height = static_cast<int>(new_width / aspect_ratio);
+      cv::resize(depth_image, depth_image, cv::Size(new_width, new_height));
+
+      auto T_bl_cam = *stereo_output->getBodyPoseCam();
+      this->drawTf(map_ / odom_ / baselink_ / "left_cam", T_bl_cam, 0.5, false);
+
+      // draw raw data
+      this->drawDepthImage(
+          map_ / odom_ / baselink_ / "left_cam", depth_image, false);
     }
 
     // Check if it's time to save trajectories (every 10 seconds)
@@ -694,8 +737,9 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
           rerun::TextLog(message).with_level(rerun::TextLogLevel::Warning));
     }
 
-    visualizeLandmarks(
-        map_ / odom_, lcd_output->landmarks_, Eigen::Vector4f(255, 255, 255, 150));
+    visualizeLandmarks(map_ / odom_,
+                       lcd_output->landmarks_,
+                       Eigen::Vector4f(255, 255, 255, 150));
     visualizeLCDQueryAndCandidates(lcd_output->query_frame_,
                                    lcd_output->global_candidates_,
                                    lcd_output->states_);

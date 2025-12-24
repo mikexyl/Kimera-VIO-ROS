@@ -40,7 +40,7 @@ RUN apt-get update && apt-get install -y \
     libspdlog-dev libgraphviz-dev kitty \
     libsuitesparse-dev \
     libmetis-dev libgflags-dev libgoogle-glog-dev googletest \
-    python3-catkin-tools libmkl-dev libblas-dev gdb && \
+    python3-catkin-tools libmkl-dev libblas-dev gdb libgsl-dev && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 

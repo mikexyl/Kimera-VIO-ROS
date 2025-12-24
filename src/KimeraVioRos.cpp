@@ -117,14 +117,13 @@ bool KimeraVioRos::runKimeraVio() {
       std::tm tm_local = *std::localtime(&now_time_t);
 
       std::ostringstream oss;
-      oss << std::put_time(&tm_local, "%Y-%m-%d-%H-%M-%S");
+      oss << std::put_time(&tm_local, "%Y%m%d%H%M%S");
       std::string now_str = oss.str();
 
       RerunVisualizer::Params params{.base_link_frame_id = base_link_frame_id_,
                                      .odom_frame_id = odom_frame_id_,
                                      .map_frame_id = map_frame_id_,
                                      .gt_csv_file = gt_csv_file,
-                                     .recording_id = now_str,
                                      .result_dir = result_dir};
 
       visualizer_ = std::make_unique<RerunVisualizer>(params);

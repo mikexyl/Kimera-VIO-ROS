@@ -10,28 +10,34 @@
 			"path": ".."
 		},
 		{
-			"path": "../../Kimera-RPGO"
+			"path": "../../Kimera-Distributed"
 		},
 		{
-			"path": "../../xfeat-cpp-ros"
+			"path": "../../Kimera-Multi"
 		},
 		{
-			"path": "../../aria/aria_viz"
+			"path": "../../Kimera-Multi-LCD"
 		},
 		{
-			"path": "../../accelerated_features"
-		},
-		{
-			"path": "../../vio-factors"
+			"path": "../../aria"
 		},
 		{
 			"path": "../../vilib"
 		},
 		{
-			"path": "../../gtsam"
+			"path": "../../dpgo_ros"
 		},
 		{
-			"path": "../../Kimera-Distributed"
+			"path": "../../cbs"
+		},
+		{
+			"path": "../../dpgo"
+		},
+		{
+			"path": "../../pose_graph_tools"
+		},
+		{
+			"path": "../../Kimera-RPGO"
 		}
 	],
 	"settings": {}

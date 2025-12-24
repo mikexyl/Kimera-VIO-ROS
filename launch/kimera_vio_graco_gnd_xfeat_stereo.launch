@@ -1,10 +1,11 @@
 <launch>
-  <arg name="robot_name" default="Alpha" />
-  <arg name="camera_name" default="left_camera"/>
-  <arg name="online" default="true" />
+  <arg name="camera_name" default="camera_left"/>
+  <arg name="online" default="false" />
   <arg name="log_output" default="false"/>
   <arg name="rosbag_path" default="path" />
-  <arg name="config_type" default="S3EAlphaMonoXfeat" />
+  <arg name="config_type" default="GrAcoGndStereoXfeat" />
+  <arg name="seq" default="g1"/>
+  <arg name="gt_csv_file" default=""/>
   <arg name="robot_id" default="0" />
   <param name="use_sim_time" value="true"/>
   <arg name="debug" default="0" />
@@ -12,10 +13,9 @@
   <arg name="do_coarse_temporal_sync" default="false"/>
   <arg name="do_fine_temporal_sync" default="false"/>
   <arg name="use_external_odom" default="false"/>
-  <arg name="use_lcd" default="0"/>
+  <arg name="use_lcd" default="2"/>
   <arg name="lcd_no_optimize" default="false"/>
   <arg name="lcd_no_detection" default="false"/>
-  <arg name="result_dir" value="$(find kimera_vio_ros)/output_logs/$(arg config_type)/results"/>
 
   <arg name="use_visualizer" default="2"/>
 
@@ -24,26 +24,26 @@
   <arg name="should_use_sim_time" default="true"/>
   <arg name="params_folder" value="$(find kimera_vio)/params/$(arg config_type)"/>
   <arg if="$(arg log_output)" name="log_output_path" value="$(find kimera_vio_ros)/output_logs/$(arg config_type)"/>
+  <arg name="result_dir" value="$(find kimera_vio_ros)/output_logs/$(arg config_type)/$(arg seq)/results"/>
 
   <!-- Subscribed Topics -->
-  <arg name="left_cam_topic" value="/$(arg robot_name)/left_camera"/>
-  <arg name="right_cam_topic" value="/$(arg robot_name)/right_camera"/>
-  <arg name="imu_topic"  value="/$(arg robot_name)/imu/data"/>
+  <arg name="left_cam_topic" value="/$(arg camera_name)/image_raw"/>
+  <arg name="right_cam_topic" value="/$(arg camera_name)/image_raw"/>
+  <arg name="imu_topic" value="/gnss/imu" />
   <!-- Only used when parsing a rosbag -->
-  <arg name="external_odom_topic" value="/$(arg robot_name)/jackal_velocity_controller/odom"/>
+  <arg name="external_odom_topic" value="/jackal_velocity_controller/odom"/>
 
-  <node pkg="image_transport" type="republish" name="left_image_republish" output="screen" args="compressed raw">
+  <node pkg="image_transport" type="republish" name="image_republish" output="screen" args="compressed raw">
     <remap from="in" to="$(arg left_cam_topic)"/>
     <remap from="out" to="$(arg left_cam_topic)"/>
   </node>
 
-  <node pkg="image_transport" type="republish" name="right_image_republish" output="screen" args="compressed raw">
+  <node pkg="image_transport" type="republish" name="image_republish_right" output="screen" args="compressed raw">
     <remap from="in" to="$(arg right_cam_topic)"/>
     <remap from="out" to="$(arg right_cam_topic)"/>
   </node>
 
   <!-- Launch actual pipeline -->
-  <include file="$(find kimera_vio_ros)/launch/kimera_vio_ros.launch"
-    pass_all_args="true"/>
+  <include file="$(find kimera_vio_ros)/launch/kimera_vio_ros.launch" pass_all_args="true"/>
 
 </launch>

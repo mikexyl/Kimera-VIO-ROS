@@ -102,16 +102,23 @@ class RosLoopClosureVisualizer : public LoopClosureVisualizer {
   std::map<size_t, ros::Time> key_stamped_;
 
   struct lcd_frame {
+    uint64_t timestamp_ns_;
+    KeypointsCV keypoints_2d_;
     Landmarks keypoints_3d_;
     BearingVectors versors_;
     decltype(LcdOutput::bow_vec_) bow_vec_;
     VIO::OrbDescriptor descriptors_mat_;
 
     explicit lcd_frame(const LcdOutput& lcd_output)
-        : keypoints_3d_(lcd_output.keypoints_3d_),
+        : keypoints_2d_(lcd_output.keypoints_2d_),
+          keypoints_3d_(lcd_output.keypoints_3d_),
           versors_(lcd_output.versors_),
           bow_vec_(lcd_output.bow_vec_),
-          descriptors_mat_(lcd_output.descriptors_mat_) {}
+          descriptors_mat_(lcd_output.descriptors_mat_) {
+      CHECK(lcd_output.keypoints_2d_.size());
+      CHECK(lcd_output.timestamp_ != 0);
+      timestamp_ns_ = lcd_output.timestamp_;
+    }
   };
 
   std::vector<lcd_frame> frames_;
