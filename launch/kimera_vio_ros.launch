@@ -127,7 +127,6 @@ file and include this one to launch KimeraVIO on the dataset of your choice -->
         launch-prefix="$(arg launch_prefix)"
         required="$(arg close_on_error)"
         args="--use_lcd=$(arg use_lcd)
-              --vocabulary_path=$(arg path_to_vocab)
               $(arg pipeline_flag_args)
               --flagfile=$(arg flags_folder)/Mesher.flags
               --flagfile=$(arg flags_folder)/VioBackend.flags
@@ -139,7 +138,6 @@ file and include this one to launch KimeraVIO on the dataset of your choice -->
               --lcd_no_optimize=$(arg lcd_no_optimize)
               --lcd_no_detection=$(arg lcd_no_detection)
               --depth_image_mask=$(arg depth_image_mask)
-              --max_nss_vlad_distance=0.1
               $(arg glog_args)
               --colorlogtostderr=1
               --log_prefix=1
@@ -148,7 +146,6 @@ file and include this one to launch KimeraVIO on the dataset of your choice -->
               --log_output=$(arg log_output)
               --log_euroc_gt_data=$(arg log_output)
               --output_path=$(arg log_output_path)
-              --lcd_disable_stereo_match_depth_check=$(arg lcd_disable_stereo_match_depth_check)
               --no_incremental_pose=$(arg no_incremental_pose)
               --viz_type=$(arg viz_type)
               --visualize=$(arg visualize)">

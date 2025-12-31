@@ -27,8 +27,8 @@
   <arg name="result_dir" value="$(find kimera_vio_ros)/output_logs/$(arg config_type)/$(arg seq)/results"/>
 
   <!-- Subscribed Topics -->
-  <arg name="left_cam_topic" value="/$(arg camera_name)/image_raw"/>
-  <arg name="right_cam_topic" value="/$(arg camera_name)/image_raw"/>
+  <arg name="left_cam_topic" value="/camera_left/image_raw"/>
+  <arg name="right_cam_topic" value="/camera_right/image_raw"/>
   <arg name="imu_topic" value="/gnss/imu" />
   <!-- Only used when parsing a rosbag -->
   <arg name="external_odom_topic" value="/jackal_velocity_controller/odom"/>

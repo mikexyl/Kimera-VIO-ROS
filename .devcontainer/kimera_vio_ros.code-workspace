@@ -22,9 +22,6 @@
 			"path": "../../aria"
 		},
 		{
-			"path": "../../vilib"
-		},
-		{
 			"path": "../../dpgo_ros"
 		},
 		{
@@ -34,10 +31,7 @@
 			"path": "../../dpgo"
 		},
 		{
-			"path": "../../pose_graph_tools"
-		},
-		{
-			"path": "../../Kimera-RPGO"
+			"path": "../../JIST"
 		}
 	],
 	"settings": {}

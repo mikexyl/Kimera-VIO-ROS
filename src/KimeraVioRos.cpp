@@ -147,11 +147,6 @@ bool KimeraVioRos::runKimeraVio() {
   VLOG(1) << "Destroy Data Provider.";
   data_provider_.reset();
 
-  std::unique_ptr<PreloadedVocab> preloaded_vocab;
-  if (FLAGS_use_lcd == 1) {  // only load if use lcd =1, i.e. BoW
-    preloaded_vocab.reset(new PreloadedVocab());
-  }
-
   // Then, create dataset parser. This must be before vio pipeline bcs
   // the data provider may modify the init gt pose.
   VLOG(1) << "Creating Data Provider.";
@@ -171,22 +166,19 @@ bool KimeraVioRos::runKimeraVio() {
       vio_pipeline_ =
           std::make_unique<MonoImuPipeline>(*vio_params_,
                                             std::move(visualizer_),
-                                            std::move(ros_display_),
-                                            std::move(preloaded_vocab));
+                                            std::move(ros_display_));
     } break;
     case VIO::FrontendType::kStereoImu: {
       vio_pipeline_ =
           std::make_unique<StereoImuPipeline>(*vio_params_,
                                               std::move(visualizer_),
-                                              std::move(ros_display_),
-                                              std::move(preloaded_vocab));
+                                              std::move(ros_display_));
     } break;
     case VIO::FrontendType::kRgbdImu: {
       vio_pipeline_ =
           std::make_unique<RgbdImuPipeline>(*vio_params_,
                                             std::move(visualizer_),
-                                            std::move(ros_display_),
-                                            std::move(preloaded_vocab));
+                                            std::move(ros_display_));
     } break;
     default: {
       LOG(FATAL) << "Unrecognized frontend type: "
