@@ -15,6 +15,8 @@ file and include this one to launch KimeraVIO on the dataset of your choice -->
   <param name="use_sim_time" value="$(arg should_use_sim_time)"/>
   <arg name="rosbag_path" unless="$(arg online)"/>
 
+  <arg name="visualization_profile" default="0"/>
+
   <arg name="rgb_image_transport" default="raw"/>
   <!-- BoW vector publishing for Kimera-Multi -->
   <arg name="bow_batch_size" default="1" />
@@ -236,5 +238,7 @@ file and include this one to launch KimeraVIO on the dataset of your choice -->
 
     <param name="gt_csv_file" value="$(arg gt_csv_file)"/>
     <param name="result_dir" value="$(arg result_dir)"/>
+
+    <param name="visualization_profile" value="$(arg visualization_profile)"/>
   </node>
 </launch>

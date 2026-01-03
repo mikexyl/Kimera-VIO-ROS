@@ -5,10 +5,11 @@
   <arg name="rosbag_path" default="path" />
   <arg name="config_type" default="GrAcoStereoXfeat" />
   <arg name="seq" default="a5"/>
-  <arg name="gt_csv_file" default=""/>
+  <arg name="gt_csv_file" default="/datasets_extra/graco/aerial-06-20m.csv"/>
   <arg name="robot_id" default="0" />
   <param name="use_sim_time" value="true"/>
   <arg name="debug" default="0" />
+  <arg name="visualization_profile" default="3"/>
 
   <arg name="do_coarse_temporal_sync" default="false"/>
   <arg name="do_fine_temporal_sync" default="false"/>

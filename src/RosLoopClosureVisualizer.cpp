@@ -45,9 +45,6 @@ RosLoopClosureVisualizer::RosLoopClosureVisualizer()
   nh_private_.param("bow_batch_size", bow_batch_size_, 5);
   nh_private_.param("bow_skip_num", bow_skip_num_, 1);
   nh_private_.param("publish_vlc_frames", publish_vlc_frames_, true);
-  ROS_INFO("BoW vector batch size: %d", bow_batch_size_);
-  ROS_INFO("BoW vector skip num: %d", bow_skip_num_);
-  ROS_INFO("Publish VLC frames: %d", publish_vlc_frames_);
 
   // Publishers
   trajectory_pub_ = nh_.advertise<nav_msgs::Path>("optimized_trajectory", 1);

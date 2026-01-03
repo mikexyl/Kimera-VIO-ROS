@@ -77,6 +77,13 @@ class GlogStreamBuf : public std::streambuf {
   char buffer_[1024];
 };
 
+enum class VisualizationProfile {
+  Minimal = 0,  // Only pose and trajectory
+  Standard,     // Add tracking images and landmarks
+  Detailed,     // Add depth images, covariance, smoother states
+  Debug         // Everything including graph visualization
+};
+
 class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
  public:
   struct Params {
@@ -86,6 +93,7 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
     std::string gt_csv_file = "";
     std::optional<std::string> recording_id = std::nullopt;
     std::string result_dir = "rerun_results";
+    VisualizationProfile profile = VisualizationProfile::Standard;
   };
 
   RerunVisualizer(const Params& params)
@@ -94,14 +102,16 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
                         params.map_frame_id,
                         params.gt_csv_file,
                         params.recording_id,
-                        params.result_dir) {}
+                        params.result_dir,
+                        params.profile) {}
 
   RerunVisualizer(std::string base_link_frame_id = "baselink",
                   std::string odom_frame_id = "odom",
                   std::string map_frame_id = "map",
                   std::string gt_csv_file = "",
                   std::optional<std::string> recording_id = std::nullopt,
-                  std::string result_dir = "")
+                  std::string result_dir = "",
+                  VisualizationProfile profile = VisualizationProfile::Standard)
       : VIO::Visualizer3D(VIO::VisualizationType::kNone),
         aria::viz::VisualizerRerun(aria::viz::VisualizerRerun::Params(
             "kimera_vio",
@@ -110,7 +120,8 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
         baselink_(base_link_frame_id),
         map_(map_frame_id),
         odom_(odom_frame_id),
-        result_dir_(result_dir) {
+        result_dir_(result_dir),
+        profile_(profile) {
     // draw the origin frame for visualization
     this->drawTf(map_, Pose3::Identity(), 0.3, true);
 
@@ -150,6 +161,7 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
 
     // Initialize timer for trajectory saving
     last_save_time_ = std::chrono::steady_clock::now();
+    last_gt_draw_time_ = std::chrono::steady_clock::now();
   }
 
   virtual ~RerunVisualizer() = default;
@@ -247,14 +259,17 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
                          1.f,
                          false);
 
-    auto cur_cov = input.backend_output_->state_covariance_lkf_;
-    auto half_green = aria::viz::ColorMap::kGreen;
-    half_green[3] = 128;
-    this->drawUncertainty(map_ / odom_ / baselink_ / "covariance",
-                          Pose3::Identity(),
-                          cur_cov.block<3, 3>(3, 3),
-                          half_green,
-                          0.1);
+    // Draw covariance for Detailed and Debug profiles
+    if (profile_ >= VisualizationProfile::Detailed) {
+      auto cur_cov = input.backend_output_->state_covariance_lkf_;
+      auto half_green = aria::viz::ColorMap::kGreen;
+      half_green[3] = 128;
+      this->drawUncertainty(map_ / odom_ / baselink_ / "covariance",
+                            Pose3::Identity(),
+                            cur_cov.block<3, 3>(3, 3),
+                            half_green,
+                            0.1);
+    }
 
     cv::Mat tracking_image_clone =
         input.frontend_output_->getTrackingImage()->clone();
@@ -270,7 +285,9 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
     //                    false);
     // }
 
-    if (not input.frontend_output_->getTrackingImage()->empty()) {
+    // Draw tracking image for Standard and above
+    if (profile_ >= VisualizationProfile::Standard &&
+        not input.frontend_output_->getTrackingImage()->empty()) {
       cv::Mat small_image;
       // resize to width 320 while keeping aspect ratio
       double aspect_ratio = static_cast<double>(tracking_image_clone.cols) /
@@ -305,62 +322,72 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
     Pose3 T_odom_pose = odom_states_.at<Pose3>(earliest_frame);
     Pose3 W_T_smoother = T_odom_pose * T_smoother_pose.inverse();
 
-    smoother_states_.clear();
-    smoother_states_.insert_or_assign(input.backend_output_->state_);
-    visualizeLandmarks(
-        map_ / odom_ / "smoother", lmks_vec, aria::viz::ColorMap::kRed);
-    drawTf(map_ / odom_ / "smoother", W_T_smoother);
-    drawPoints(map_ / odom_ / "smoother" / "states",
-               input.backend_output_->state_,
-               {aria::viz::ColorMap::kRed},
-               {0.5});
-    pose_states_.clear();
-    for (const auto& key : smoother_states_.keys()) {
-      Symbol symbol(key);
-      if (symbol.chr() == kPoseSymbolChar) {
-        pose_states_.insert_or_assign(symbol.index(),
-                                      smoother_states_.at<Pose3>(key));
+    // Draw smoother states for Detailed and above
+    if (profile_ >= VisualizationProfile::Detailed) {
+      smoother_states_.clear();
+      smoother_states_.insert_or_assign(input.backend_output_->state_);
+      visualizeLandmarks(
+          map_ / odom_ / "smoother", lmks_vec, aria::viz::ColorMap::kRed);
+      drawTf(map_ / odom_ / "smoother", W_T_smoother);
+      drawPoints(map_ / odom_ / "smoother" / "states",
+                 input.backend_output_->state_,
+                 {aria::viz::ColorMap::kRed},
+                 {0.5});
+      pose_states_.clear();
+      for (const auto& key : smoother_states_.keys()) {
+        Symbol symbol(key);
+        if (symbol.chr() == kPoseSymbolChar) {
+          pose_states_.insert_or_assign(symbol.index(),
+                                        smoother_states_.at<Pose3>(key));
+        }
       }
     }
 
-    if (auto stereo_output = std::dynamic_pointer_cast<StereoFrontendOutput>(
-            input.frontend_output_)) {
-      // visualize the disparity map if available
-      if (!stereo_output->stereo_frame_lkf_.left_disp_img_.empty()) {
-        // Convert disparity to grayscale 8-bit image (clip to 0-255, no
-        // normalization)
-        cv::Mat disp_gray;
-        stereo_output->stereo_frame_lkf_.left_disp_img_.convertTo(disp_gray,
-                                                                  CV_8U);
+    // Draw stereo depth/disparity for Detailed and above
+    if (profile_ >= VisualizationProfile::Detailed) {
+      if (auto stereo_output = std::dynamic_pointer_cast<StereoFrontendOutput>(
+              input.frontend_output_)) {
+        // visualize the disparity map if available
+        if (!stereo_output->stereo_frame_lkf_.left_disp_img_.empty()) {
+          // Convert disparity to grayscale 8-bit image (clip to 0-255, no
+          // normalization)
+          cv::Mat disp_gray;
+          stereo_output->stereo_frame_lkf_.left_disp_img_.convertTo(disp_gray,
+                                                                    CV_8U);
 
+          // resize to width 320 while keeping aspect ratio
+          double aspect_ratio = static_cast<double>(disp_gray.cols) /
+                                static_cast<double>(disp_gray.rows);
+          int new_width = 320;
+          int new_height = static_cast<int>(new_width / aspect_ratio);
+          cv::resize(disp_gray, disp_gray, cv::Size(new_width, new_height));
+
+          this->drawImage("stereo/disp_map", disp_gray, false);
+        }
+
+        auto depth_image = stereo_output->stereo_frame_lkf_.left_depth_img_;
         // resize to width 320 while keeping aspect ratio
-        double aspect_ratio = static_cast<double>(disp_gray.cols) /
-                              static_cast<double>(disp_gray.rows);
+        double aspect_ratio = static_cast<double>(depth_image.cols) /
+                              static_cast<double>(depth_image.rows);
         int new_width = 320;
         int new_height = static_cast<int>(new_width / aspect_ratio);
-        cv::resize(disp_gray, disp_gray, cv::Size(new_width, new_height));
+        cv::resize(depth_image, depth_image, cv::Size(new_width, new_height));
 
-        this->drawImage("stereo/disp_map", disp_gray, false);
+        auto T_bl_cam = *stereo_output->getBodyPoseCam();
+        this->drawTf(
+            map_ / odom_ / baselink_ / "left_cam", T_bl_cam, 0.5, false);
+
+        // draw raw data
+        this->drawDepthImage(
+            map_ / odom_ / baselink_ / "left_cam", depth_image, false);
       }
-
-      auto depth_image = stereo_output->stereo_frame_lkf_.left_depth_img_;
-      // resize to width 320 while keeping aspect ratio
-      double aspect_ratio = static_cast<double>(depth_image.cols) /
-                            static_cast<double>(depth_image.rows);
-      int new_width = 320;
-      int new_height = static_cast<int>(new_width / aspect_ratio);
-      cv::resize(depth_image, depth_image, cv::Size(new_width, new_height));
-
-      auto T_bl_cam = *stereo_output->getBodyPoseCam();
-      this->drawTf(map_ / odom_ / baselink_ / "left_cam", T_bl_cam, 0.5, false);
-
-      // draw raw data
-      this->drawDepthImage(
-          map_ / odom_ / baselink_ / "left_cam", depth_image, false);
     }
 
     // Check if it's time to save trajectories (every 10 seconds)
     this->checkAndSaveTrajectories(odom_states_);
+
+    // Check if it's time to draw GT trajectory (every 5 seconds)
+    this->checkAndDrawGtTraj(odom_states_, timestamp_map_);
 
     this->publishLcdOutput(input.lcd_output_);
 
@@ -420,7 +447,6 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
 
   void drawGtTraj(gtsam::Values est_traj_values,
                   const FrameIDTimestampMap& timestamp_map) {
-    std::lock_guard<std::mutex> lock(rerun_mutex_);
     if (not gt_trajectory_.empty()) {
       if (est_traj_values.size() - prev_alignment_size_ > 50) {
         prev_alignment_size_ = est_traj_values.size();
@@ -560,6 +586,17 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
     }
   }
 
+  void checkAndDrawGtTraj(const gtsam::Values& states,
+                          const FrameIDTimestampMap& timestamp_map) {
+    auto current_time = std::chrono::steady_clock::now();
+    if (current_time - last_gt_draw_time_ >= gt_draw_interval_) {
+      if (!states.empty() && !timestamp_map.empty()) {
+        this->drawGtTraj(states, timestamp_map);
+      }
+      last_gt_draw_time_ = current_time;
+    }
+  }
+
   void forceSaveTrajectories() {
     if (!odom_states_.empty() && !timestamp_map_.empty()) {
       this->saveTUMTrajFile(odom_states_, timestamp_map_, "DE-VIO");
@@ -682,12 +719,16 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
     this->setTimeNSec(lcd_output->timestamp_);
     this->drawTf(map_ / odom_, lcd_output->Map_Pose_Odom_, 0.3, false);
 
-    visualizeLandmarks(map_ / odom_,
-                       lcd_output->landmarks_,
-                       Eigen::Vector4f(255, 255, 255, 150));
+    // Draw LCD landmarks for Standard and above
+    if (profile_ >= VisualizationProfile::Standard) {
+      visualizeLandmarks(map_ / odom_,
+                         lcd_output->landmarks_,
+                         Eigen::Vector4f(255, 255, 255, 150));
+    }
 
+    // Draw pose graph for Debug profile
     auto opt_traj = lcd_output->states_;
-    if (not opt_traj.empty()) {
+    if (not opt_traj.empty() && profile_ >= VisualizationProfile::Debug) {
       this->drawFactors(map_ / "pose_graph",
                         lcd_output->nfg_,
                         lcd_output->states_,
@@ -747,114 +788,6 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
       VLOG(3) << "Visualized " << lcd_output->keypoints_2d_.size()
               << " LCD 2D keypoints";
     }
-  }
-
-  GraphAndValues optimizePoseGraph(
-      const Values& odom_values,
-      std::map<FrameId, FrameIdSet> covis_graph,
-      std::vector<std::tuple<Key, Key, Pose3>> loops) {
-    Values::shared_ptr result(new Values(odom_values));
-    // find the earliest two pose keys in odom_values
-    FrameId first_frame = std::numeric_limits<FrameId>::max();
-    FrameId second_frame = std::numeric_limits<FrameId>::max();
-    for (auto key : odom_values.keys()) {
-      auto frame_id = key;
-      if (frame_id < first_frame) {
-        second_frame = first_frame;
-        first_frame = frame_id;
-      } else if (frame_id < second_frame && frame_id != first_frame) {
-        second_frame = frame_id;
-      }
-    }
-
-    if (first_frame == std::numeric_limits<FrameId>::max() or
-        second_frame == std::numeric_limits<FrameId>::max()) {
-      LOG(WARNING) << "Not enough poses to optimize.";
-      return {nullptr, result};
-    }
-
-    NonlinearFactorGraph::shared_ptr nfg(new NonlinearFactorGraph);
-
-    if (not last_odom_pair_) {
-      // add prior
-      auto prior_noise = noiseModel::Diagonal::Sigmas(
-          (Vector(6) << Vector3::Constant(1e-6), Vector3::Constant(1e-6))
-              .finished());
-      nfg->add(boost::make_shared<PriorFactor<Pose3>>(
-          first_frame, odom_values.at<Pose3>(first_frame), prior_noise));
-    }
-
-    // add odometry factors
-    auto noise = noiseModel::Diagonal::Sigmas(
-        (Vector(6) << Vector3::Constant(1), Vector3::Constant(3)).finished());
-    auto huber = noiseModel::Robust::Create(
-        noiseModel::mEstimator::Huber::Create(1.345), noise);
-    // add all states in odom values as between factors
-    for (const auto& key : odom_values.keys()) {
-      auto next_key = key + 1;
-      if (odom_values.exists(next_key)) {
-        auto rel_pose =
-            odom_values.at<Pose3>(key).between(odom_values.at<Pose3>(next_key));
-        nfg->add(boost::make_shared<BetweenFactor<Pose3>>(
-            key, next_key, rel_pose, huber));
-      }
-    }
-
-    // remove old odom factors
-    FactorIndices to_remove;
-    for (size_t i = 0; i < nfg->size(); ++i) {
-      auto key0 = nfg->at(i)->keys()[0];
-      auto key1 = nfg->at(i)->keys()[1];
-      auto factors_it = isam2_.getVariableIndex().find(key0);
-      if (factors_it != isam2_.getVariableIndex().end()) {
-        auto& factor_indices = factors_it->second;
-        for (const auto& factor_index : factor_indices) {
-          auto factor = isam2_.getFactorsUnsafe().at(factor_index);
-          if (factor->keys().size() == 2 and
-              ((factor->keys()[0] == key0 and factor->keys()[1] == key1) or
-               (factor->keys()[0] == key1 and factor->keys()[1] == key0))) {
-            to_remove.push_back(factor_index);
-          }
-        }
-      }
-    }
-
-    // add loop closure factors
-    for (const auto& [key1, key2, rel_pose] : loops) {
-      if ((isam2_.valueExists(key1) and isam2_.valueExists(key2)) or
-          (odom_values.exists(key1) and odom_values.exists(key2))) {
-        nfg->add(boost::make_shared<BetweenFactor<Pose3>>(
-            key1, key2, rel_pose, huber));
-      } else {
-        LOG(FATAL) << "Loop closure keys not in odom values: " << key1 << " or "
-                   << key2;
-      }
-    }
-
-    gtsam::Values new_theta;
-    for (const auto& key : odom_values.keys()) {
-      if (not isam2_.valueExists(key)) {
-        new_theta.insert(key, odom_values.at<Pose3>(key));
-      }
-    }
-
-    try {
-      isam2_.update(*nfg, new_theta, to_remove);
-    } catch (const std::exception& e) {
-      LOG(ERROR) << "ISAM2 update failed: " << e.what();
-      isam2_.getFactorsUnsafe().print("Current ISAM2 factors:");
-      nfg->print("New factors to add:");
-      odom_values.print("Odom values:");
-      throw;
-    }
-
-    *result = isam2_.calculateBestEstimate();
-
-    last_odom_pair_ = std::make_pair(first_frame, second_frame);
-
-    *nfg = isam2_.getFactorsUnsafe();
-
-    return {nfg, result};
   }
 
   std::map<Timestamp, gtsam::Pose3> loadTrajectoryMapFromCSV(
@@ -938,9 +871,16 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
 
   std::mutex rerun_mutex_;
 
+  // Visualization profile
+  VisualizationProfile profile_;
+
   // Timer for saving trajectory files
   std::chrono::steady_clock::time_point last_save_time_;
   static constexpr std::chrono::seconds save_interval_{10};
+
+  // Timer for GT trajectory drawing
+  std::chrono::steady_clock::time_point last_gt_draw_time_;
+  static constexpr std::chrono::seconds gt_draw_interval_{5};
 };
 
 }  // namespace VIO

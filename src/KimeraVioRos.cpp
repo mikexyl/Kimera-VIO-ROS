@@ -110,6 +110,14 @@ bool KimeraVioRos::runKimeraVio() {
       std::string result_dir;
       nh_private_.param("result_dir", result_dir, std::string(""));
 
+      // Get visualization profile from ROS param
+      int viz_profile_int;
+      nh_private_.param("visualization_profile",
+                        viz_profile_int,
+                        0);  // 0 = Minimal (default)
+      VisualizationProfile viz_profile =
+          static_cast<VisualizationProfile>(viz_profile_int);
+
       VLOG(1) << "Creating Rerun Display.";
       CHECK(vio_params_);
       auto now = std::chrono::system_clock::now();
@@ -124,7 +132,8 @@ bool KimeraVioRos::runKimeraVio() {
                                      .odom_frame_id = odom_frame_id_,
                                      .map_frame_id = map_frame_id_,
                                      .gt_csv_file = gt_csv_file,
-                                     .result_dir = result_dir};
+                                     .result_dir = result_dir,
+                                     .profile = viz_profile};
 
       visualizer_ = std::make_unique<RerunVisualizer>(params);
       ros_lcd_visualizer_ = std::make_unique<RosLoopClosureVisualizer>();
