@@ -520,7 +520,8 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
                       states,
                       aria::viz::ColorMap::kGreen,
                       1.f,
-                      false);
+                      false,
+                      true);
   }
 
   void visualizeLCDQueryAndCandidates(FrameId query_id,
@@ -681,68 +682,9 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
     this->setTimeNSec(lcd_output->timestamp_);
     this->drawTf(map_ / odom_, lcd_output->Map_Pose_Odom_, 0.3, false);
 
-    auto pose3ToString = [](const Pose3& pose) {
-      return fmt::format("Pose3({}, {}, {}, {}, {}, {})",
-                         pose.rotation().rpy()[0],
-                         pose.rotation().rpy()[1],
-                         pose.rotation().rpy()[2],
-                         pose.x(),
-                         pose.y(),
-                         pose.z());
-    };
-
-    auto rot3ToString = [](const Pose3& rot) {
-      return fmt::format("Rot3({}, {}, {})",
-                         rot.rotation().rpy()[0],
-                         rot.rotation().rpy()[1],
-                         rot.rotation().rpy()[2]);
-    };
-
-    CHECK(lcd_output);
-    bool has_loop = false;
-    if (lcd_output->lcd_status_ == LCDStatus::LOOP_DETECTED or
-        lcd_output->lcd_status_ == LCDStatus::LOOP_DETECTED_ROT) {
-      has_loop = true;
-      std::string message;
-      if (lcd_output->lcd_status_ == LCDStatus::LOOP_DETECTED_ROT) {
-        for (int i = 0; i < lcd_output->relative_pose_.size(); ++i) {
-          message += fmt::format("Rot Loop closure detected: {} -> {}: {}",
-                                 lcd_output->id_match_[i],
-                                 lcd_output->id_recent_[i],
-                                 rot3ToString(lcd_output->relative_pose_[i]));
-        }
-      } else {
-        for (int i = 0; i < lcd_output->relative_pose_.size(); ++i) {
-          message += fmt::format("Loop closure detected: {} -> {}: {}",
-                                 lcd_output->id_match_[i],
-                                 lcd_output->id_recent_[i],
-                                 pose3ToString(lcd_output->relative_pose_[i]));
-        }
-      }
-      this->rec()->log(
-          "lcd_log",
-          rerun::TextLog(message).with_level(rerun::TextLogLevel::Info));
-
-      // save nfg to file
-      gtsam::writeG2o(lcd_output->nfg_,
-                      lcd_output->states_,
-                      fmt::format("lcd_{}.g2o", lcd_output->timestamp_));
-
-    } else {
-      std::string message =
-          fmt::format("No loop closure detected: status {}",
-                      LoopResult::asString(lcd_output->lcd_status_));
-      this->rec()->log(
-          "lcd_log",
-          rerun::TextLog(message).with_level(rerun::TextLogLevel::Warning));
-    }
-
     visualizeLandmarks(map_ / odom_,
                        lcd_output->landmarks_,
                        Eigen::Vector4f(255, 255, 255, 150));
-    visualizeLCDQueryAndCandidates(lcd_output->query_frame_,
-                                   lcd_output->global_candidates_,
-                                   lcd_output->states_);
 
     auto opt_traj = lcd_output->states_;
     if (not opt_traj.empty()) {
@@ -751,38 +693,59 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
                         lcd_output->states_,
                         getColorsFromFactorsType(lcd_output->nfg_),
                         1.f,
-                        false);
+                        false,
+                        true);
 
       visualizeCovisGraph(lcd_output->covis_graph_, lcd_output->states_);
+    }
 
-      std::vector<std::tuple<Key, Key, Pose3>> loops;
-      if (has_loop) {
-        for (size_t i = 0; i < lcd_output->id_match_.size(); ++i) {
-          loops.emplace_back(lcd_output->id_match_[i],
-                             lcd_output->id_recent_[i],
-                             lcd_output->relative_pose_[i]);
-        }
+    // Visualize LCD keypoints
+    if (!lcd_output->keypoints_3d_.empty()) {
+      // Draw 3D keypoints in the map frame
+      std::vector<Point3> kpts_3d(lcd_output->keypoints_3d_.begin(),
+                                  lcd_output->keypoints_3d_.end());
+      auto cyan_color = Eigen::Vector4f(0, 255, 255, 255);
+      this->drawPoints(map_ / "lcd" / "keypoints_3d",
+                       kpts_3d,
+                       {cyan_color},
+                       {2.0},
+                       {},
+                       false);
+
+      VLOG(3) << "Visualized " << lcd_output->keypoints_3d_.size()
+              << " LCD 3D keypoints";
+    }
+
+    if (!lcd_output->keypoints_2d_.empty()) {
+      // Draw 2D keypoints as image points
+      std::vector<rerun::Position2D> kpts_2d_positions;
+      kpts_2d_positions.reserve(lcd_output->keypoints_2d_.size());
+      std::vector<rerun::Color> colors;
+
+      auto dist_to_color = [](double distance) {
+        // Map distance to color (closer = blue, farther = red)
+        uint8_t r = static_cast<uint8_t>(std::min(255.0, distance * 3.0));
+        uint8_t g = 0;
+        uint8_t b = static_cast<uint8_t>(std::max(0.0, 255.0 - distance * 3.0));
+        return rerun::Color(r, g, b);
+      };
+
+      for (int i = 0; i < lcd_output->keypoints_2d_.size(); ++i) {
+        const auto& kpt = lcd_output->keypoints_2d_[i];
+        kpts_2d_positions.emplace_back(kpt.x, kpt.y);
+
+        auto kp_3d = lcd_output->keypoints_3d_.at(i);
+        double distance = kp_3d.norm();
+        colors.push_back(dist_to_color(distance));
       }
 
-      // this->saveTUMTrajFile(
-      // lcd_output->states_, lcd_output->timestamp_map_, "leSLAM");
+      this->rec()->log("lcd/keypoints_2d",
+                       rerun::Points2D(kpts_2d_positions)
+                           .with_radii({3.0f})
+                           .with_colors(colors));
 
-      auto [nfg, optimized_values] =
-          optimizePoseGraph(pose_states_, lcd_output->covis_graph_, loops);
-      if (nfg) {
-        this->saveTUMTrajFile(
-            *optimized_values, lcd_output->timestamp_map_, "DE-SLAM");
-        this->drawFactors(map_ / "pgo" / "factors",
-                          *nfg,
-                          *optimized_values,
-                          getColorsFromFactorsType(*nfg),
-                          1.f,
-                          false);
-        this->drawPoints(map_ / "pgo" / "traj",
-                         *optimized_values,
-                         {aria::viz::ColorMap::kBlue},
-                         {0.5});
-      }
+      VLOG(3) << "Visualized " << lcd_output->keypoints_2d_.size()
+              << " LCD 2D keypoints";
     }
   }
 

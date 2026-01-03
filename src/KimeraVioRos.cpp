@@ -163,22 +163,16 @@ bool KimeraVioRos::runKimeraVio() {
   vio_pipeline_ = nullptr;
   switch (vio_params_->frontend_type_) {
     case VIO::FrontendType::kMonoImu: {
-      vio_pipeline_ =
-          std::make_unique<MonoImuPipeline>(*vio_params_,
-                                            std::move(visualizer_),
-                                            std::move(ros_display_));
+      vio_pipeline_ = std::make_unique<MonoImuPipeline>(
+          *vio_params_, std::move(visualizer_), std::move(ros_display_));
     } break;
     case VIO::FrontendType::kStereoImu: {
-      vio_pipeline_ =
-          std::make_unique<StereoImuPipeline>(*vio_params_,
-                                              std::move(visualizer_),
-                                              std::move(ros_display_));
+      vio_pipeline_ = std::make_unique<StereoImuPipeline>(
+          *vio_params_, std::move(visualizer_), std::move(ros_display_));
     } break;
     case VIO::FrontendType::kRgbdImu: {
-      vio_pipeline_ =
-          std::make_unique<RgbdImuPipeline>(*vio_params_,
-                                            std::move(visualizer_),
-                                            std::move(ros_display_));
+      vio_pipeline_ = std::make_unique<RgbdImuPipeline>(
+          *vio_params_, std::move(visualizer_), std::move(ros_display_));
     } break;
     default: {
       LOG(FATAL) << "Unrecognized frontend type: "
@@ -354,12 +348,7 @@ void KimeraVioRos::connectVIO() {
 
   if (ros_lcd_visualizer_) {
     vio_pipeline_->registerLcdOutputCallback([&](const auto& msg) {
-      if (msg) {
-        CHECK(ros_lcd_visualizer_);
-        // CHECK(visualizer_);
-        ros_lcd_visualizer_->publishLcdOutput(msg);
-        // visualizer_->publishLcdOutput(msg);
-      }
+      CHECK_NOTNULL(ros_lcd_visualizer_)->publishLcdOutput(msg);
     });
   }
 }

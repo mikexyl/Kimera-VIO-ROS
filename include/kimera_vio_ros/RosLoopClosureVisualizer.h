@@ -117,7 +117,7 @@ class RosLoopClosureVisualizer : public LoopClosureVisualizer {
           descriptors_mat_(lcd_output.descriptors_mat_) {
       CHECK(lcd_output.keypoints_2d_.size());
       CHECK(lcd_output.timestamp_ != 0);
-      timestamp_ns_ = lcd_output.timestamp_;
+      timestamp_ns_ = lcd_output.timestamp_kf_;
     }
   };
 

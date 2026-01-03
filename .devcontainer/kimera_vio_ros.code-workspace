@@ -31,7 +31,7 @@
 			"path": "../../dpgo"
 		},
 		{
-			"path": "../../JIST"
+			"path": "../../pose_graph_tools"
 		}
 	],
 	"settings": {}
