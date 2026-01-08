@@ -108,6 +108,7 @@ class RosLoopClosureVisualizer : public LoopClosureVisualizer {
     BearingVectors versors_;
     decltype(LcdOutput::bow_vec_) bow_vec_;
     VIO::OrbDescriptor descriptors_mat_;
+    Pose3 T_base_cam_;
 
     explicit lcd_frame(const LcdOutput& lcd_output)
         : keypoints_2d_(lcd_output.keypoints_2d_),
@@ -118,6 +119,7 @@ class RosLoopClosureVisualizer : public LoopClosureVisualizer {
       CHECK(lcd_output.keypoints_2d_.size());
       CHECK(lcd_output.timestamp_ != 0);
       timestamp_ns_ = lcd_output.timestamp_kf_;
+      T_base_cam_ = lcd_output.T_base_cam_;
     }
   };
 

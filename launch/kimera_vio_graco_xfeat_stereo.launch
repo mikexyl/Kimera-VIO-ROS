@@ -7,6 +7,7 @@
   <arg name="seq" default="a5"/>
   <arg name="gt_csv_file" default="/datasets_extra/graco/aerial-06-20m.csv"/>
   <arg name="robot_id" default="0" />
+  <arg name="robot_name" default="a5" />
   <param name="use_sim_time" value="true"/>
   <arg name="debug" default="0" />
   <arg name="visualization_profile" default="3"/>

@@ -3,6 +3,7 @@ file and include this one to launch KimeraVIO on the dataset of your choice -->
 <launch>
   <!-- Unique integer id of this robot. -->
   <arg name="robot_id" default="0"/>
+  <arg name="robot_name" default="na"/>
   <!-- Whether or not there are other robots being run -->
   <arg name="multirobot" default="false"/>
   <!-- Dataset name (used to load params) -->
@@ -158,6 +159,7 @@ file and include this one to launch KimeraVIO on the dataset of your choice -->
     <param name="online_run"            value="$(arg online)"/>
     <param name="use_lcd"               value="$(arg use_lcd)"/>
     <param name="robot_id"              value="$(arg robot_id)"/>
+    <param name="robot_name"            value="$(arg robot_name)"/>
     <param name="use_external_odom"     value="$(arg use_external_odom)"/>
     <param name="force_same_image_timestamp" value="$(arg force_same_image_timestamp)"/>
     <!-- BoW publishing for Kimera-Multi -->

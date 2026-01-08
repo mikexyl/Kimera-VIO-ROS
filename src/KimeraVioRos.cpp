@@ -111,10 +111,8 @@ bool KimeraVioRos::runKimeraVio() {
       nh_private_.param("result_dir", result_dir, std::string(""));
 
       // Get visualization profile from ROS param
-      int viz_profile_int;
-      nh_private_.param("visualization_profile",
-                        viz_profile_int,
-                        0);  // 0 = Minimal (default)
+      int viz_profile_int = 0;
+      CHECK(nh_private_.getParam("visualization_profile", viz_profile_int));
       VisualizationProfile viz_profile =
           static_cast<VisualizationProfile>(viz_profile_int);
 
@@ -124,14 +122,18 @@ bool KimeraVioRos::runKimeraVio() {
       std::time_t now_time_t = std::chrono::system_clock::to_time_t(now);
       std::tm tm_local = *std::localtime(&now_time_t);
 
-      std::ostringstream oss;
-      oss << std::put_time(&tm_local, "%Y%m%d%H%M%S");
-      std::string now_str = oss.str();
+      char time_str[5];
+      std::strftime(time_str, sizeof(time_str), "%H%M", &tm_local);
+
+      std::string robot_name{};
+      CHECK(nh_private_.getParam("robot_name", robot_name));
 
       RerunVisualizer::Params params{.base_link_frame_id = base_link_frame_id_,
                                      .odom_frame_id = odom_frame_id_,
                                      .map_frame_id = map_frame_id_,
+                                     .robot_name = robot_name,
                                      .gt_csv_file = gt_csv_file,
+                                     .recording_id = time_str,
                                      .result_dir = result_dir,
                                      .profile = viz_profile};
 

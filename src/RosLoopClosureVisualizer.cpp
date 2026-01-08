@@ -429,9 +429,6 @@ void RosLoopClosureVisualizer::publishTimerCallback(
   }
 
   if (selected_batch_size >= bow_batch_size_) {
-    ROS_INFO("Published %zu BoW vectors to robot %hu.",
-             selected_batch_size,
-             selected_robot_id);
     bow_queries_[selected_robot_id].header.stamp = ros::Time::now();
     bow_query_pub_.publish(bow_queries_[selected_robot_id]);
     bow_queries_[selected_robot_id].queries.clear();
@@ -515,6 +512,17 @@ bool RosLoopClosureVisualizer::getFrameMsg(
   cv_img.encoding = sensor_msgs::image_encodings::TYPE_32FC1;
   cv_img.image = frame.descriptors_mat_;
   cv_img.toImageMsg(frame_msg.descriptors_mat);
+
+  CHECK(!frame.T_base_cam_.equals(gtsam::Pose3::Identity(), 1e-6));
+
+  frame_msg.T_base_cam.position.x = frame.T_base_cam_.translation().x();
+  frame_msg.T_base_cam.position.y = frame.T_base_cam_.translation().y();
+  frame_msg.T_base_cam.position.z = frame.T_base_cam_.translation().z();
+  const gtsam::Quaternion& quat = frame.T_base_cam_.rotation().toQuaternion();
+  frame_msg.T_base_cam.orientation.x = quat.x();
+  frame_msg.T_base_cam.orientation.y = quat.y();
+  frame_msg.T_base_cam.orientation.z = quat.z();
+  frame_msg.T_base_cam.orientation.w = quat.w();
 
   return true;
 }

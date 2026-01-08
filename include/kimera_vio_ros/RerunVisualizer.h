@@ -90,6 +90,7 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
     std::string base_link_frame_id = "baselink";
     std::string odom_frame_id = "odom";
     std::string map_frame_id = "map";
+    std::string robot_name = "robot0";
     std::string gt_csv_file = "";
     std::optional<std::string> recording_id = std::nullopt;
     std::string result_dir = "rerun_results";
@@ -100,6 +101,7 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
       : RerunVisualizer(params.base_link_frame_id,
                         params.odom_frame_id,
                         params.map_frame_id,
+                        params.robot_name,
                         params.gt_csv_file,
                         params.recording_id,
                         params.result_dir,
@@ -108,18 +110,20 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
   RerunVisualizer(std::string base_link_frame_id = "baselink",
                   std::string odom_frame_id = "odom",
                   std::string map_frame_id = "map",
+                  std::string robot_name = "robot0",
                   std::string gt_csv_file = "",
                   std::optional<std::string> recording_id = std::nullopt,
                   std::string result_dir = "",
                   VisualizationProfile profile = VisualizationProfile::Standard)
       : VIO::Visualizer3D(VIO::VisualizationType::kNone),
         aria::viz::VisualizerRerun(aria::viz::VisualizerRerun::Params(
-            "kimera_vio",
+            "code-slam",
             recording_id,
             "rerun+http://172.17.0.1:9876/proxy")),
         baselink_(base_link_frame_id),
-        map_(map_frame_id),
+        map_("/vio/" + robot_name + "/" + map_frame_id),
         odom_(odom_frame_id),
+        robot_name_(robot_name),
         result_dir_(result_dir),
         profile_(profile) {
     // draw the origin frame for visualization
@@ -130,7 +134,8 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
                                const char* filename,
                                int line,
                                const char* message) {
-        logGlogMessages(severity, filename, line, message);
+        logGlogMessages(
+            "vio/" + robot_name_, severity, filename, line, message);
       });
       RedirectStdCoutToGlog();
     }
@@ -210,7 +215,8 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
     }
   }
 
-  void logGlogMessages(google::LogSeverity severity,
+  void logGlogMessages(std::string entry,
+                       google::LogSeverity severity,
                        const char* filename,
                        int line,
                        const char* message) {
@@ -236,7 +242,8 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
 
     // Forward glog messages to Rerun
     this->rec()->log(
-        "glog", rerun::TextLog(fmt::format("{}", message)).with_level(level));
+        (entry + "/glog").c_str(),
+        rerun::TextLog(fmt::format("{}", message)).with_level(level));
   }
 
   VIO::VisualizerOutput::UniquePtr spinOnce(
@@ -296,7 +303,8 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
       int new_height = static_cast<int>(new_width / aspect_ratio);
       cv::resize(
           tracking_image_clone, small_image, cv::Size(new_width, new_height));
-      this->drawImage("tracking/image", small_image, false);
+      this->drawImage(
+          (robot_name_ + "/tracking/image").c_str(), small_image, false);
     }
 
     Landmarks lmks_vec;
@@ -362,7 +370,8 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
           int new_height = static_cast<int>(new_width / aspect_ratio);
           cv::resize(disp_gray, disp_gray, cv::Size(new_width, new_height));
 
-          this->drawImage("stereo/disp_map", disp_gray, false);
+          this->drawImage(
+              (robot_name_ + "/stereo/disp_map").c_str(), disp_gray, false);
         }
 
         auto depth_image = stereo_output->stereo_frame_lkf_.left_depth_img_;
@@ -477,7 +486,7 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
         if (T_est_gt) {
           T_map_gt_ = T_est_gt.value();
           rec()->log(
-              "gt_align",
+              (robot_name_ + "/gt_align").c_str(),
               rerun::TextLog(
                   fmt::format("Aligned {} pairs to GT with t_map_gt: {},{},{}",
                               poses_to_align.size(),
@@ -487,7 +496,7 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
                   .with_level(rerun::TextLogLevel::Info));
         } else {
           rec()->log(
-              "gt_align",
+              (robot_name_ + "/gt_align").c_str(),
               rerun::TextLog("Failed to align estimated trajectory to GT.")
                   .with_level(rerun::TextLogLevel::Error));
         }
@@ -780,7 +789,7 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
         colors.push_back(dist_to_color(distance));
       }
 
-      this->rec()->log("lcd/keypoints_2d",
+      this->rec()->log((robot_name_ + "/lcd/keypoints_2d").c_str(),
                        rerun::Points2D(kpts_2d_positions)
                            .with_radii({3.0f})
                            .with_colors(colors));
@@ -845,6 +854,7 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
   std::filesystem::path baselink_;
   std::filesystem::path map_;
   std::filesystem::path odom_;
+  std::string robot_name_;
 
   std::vector<Pose3> odom_traj_{};
   gtsam::Values odom_states_;
