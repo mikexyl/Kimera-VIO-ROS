@@ -242,5 +242,8 @@ file and include this one to launch KimeraVIO on the dataset of your choice -->
     <param name="result_dir" value="$(arg result_dir)"/>
 
     <param name="visualization_profile" value="$(arg visualization_profile)"/>
+
+    <!-- <param name="pointcloud_topic" value="/Bob/velodyne_points"/> -->
+    <param name="pointcloud_topic" value=""/>
   </node>
 </launch>
