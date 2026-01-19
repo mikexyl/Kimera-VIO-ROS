@@ -1,6 +1,12 @@
 [workspace]
 authors = ["Mike Xiangyu Liu <liu.xiangyu@ucy.ac.cy>"]
-channels = ["rapidsai-nightly", "conda-forge", "nvidia", "rapidsai"]
+channels = [
+  "rapidsai-nightly",
+  "conda-forge",
+  "nvidia",
+  "rapidsai",
+  "meta-forge",
+]
 name = "kimera_noetic_ws"
 platforms = ["linux-64"]
 version = "0.1.0"
@@ -13,6 +19,8 @@ LD_LIBRARY_PATH = "$LD_LIBRARY_PATH:/usr/lib/x86_64-linux-gnu:/usr/local/lib:${P
 FAISS_CMAKE_ARGS = "-DFAISS_ENABLE_GPU=ON -DFAISS_ENABLE_PYTHON=ON -DFAISS_ENABLE_CUVS=ON -Dcuvs_DIR=/workspaces/.pixi/envs/default/lib/cmake/cuvs -DBUILD_TESTING=OFF"
 LIBGL_ALWAYS_SOFTWARE = "1"
 KIMERA_OUTPUT_PATH = "/workspaces/src/Kimera-VIO-ROS/output_logs"
+CUDA_LAUNCH_BLOCKING = "1"
+CUDA_HOME = "/usr/local/cuda"
 
 [tasks.build-faiss]
 cwd = "src/faiss"
@@ -24,8 +32,13 @@ cmd = [
   "-DFAISS_ENABLE_PYTHON=OFF",
   "-DBUILD_SHARED_LIBS=ON",
   "-DCMAKE_BUILD_TYPE=Release",
-  "-DCMAKE_INSTALL_PREFIX=/usr/local",
   "-DBUILD_TESTING=OFF",
+  "-DFAISS_ENABLE_CUVS=OFF",
+  "-DFAISS_ENABLE_EXAMPLES=OFF",
+  "-DFAISS_ENABLE_DOCS=OFF",
+  "-DFAISS_ENABLE_C_API=OFF",
+  "-DCMAKE_CUDA_ARCHITECTURES=89",
+  # "-DCMAKE_CUDA_COMPILER=/workspaces/.pixi/envs/default/bin/nvcc",
   "-G",
   "Ninja",
   "&&",
@@ -55,7 +68,8 @@ config = { cmd = [
   "-DKIMERA_BUILD_TESTS=OFF",
   "-Donnxruntime_DIR=/workspaces/src/onnxruntime-linux-x64-gpu-1.22.0",
   "-DCUBLAS_DIR=/usr/local/cuda",
-  "-Dfaiss_DIR=/workspaces/src/faiss/build",
+  "-Dfaiss_DIR=/workspaces/.pixi/envs/default/lib/cmake/faiss",
+  # "-DCMAKE_CUDA_COMPILER=/workspaces/.pixi/envs/default/bin/nvcc",
 ] }
 build-gtsam = { cmd = "cd src/gtsam && mkdir -p build && cd build && cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=1 -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Release -DGTSAM_USE_SYSTEM_METIS=ON -DGTSAM_BUILD_UNSTABLE=ON -DGTSAM_USE_SYSTEM_EIGEN=ON -DGTSAM_POSE3_EXPMAP=ON -DGTSAM_ROT3_EXPMAP=ON -DGTSAM_TANGENT_PREINTEGRATION=OFF -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja -DGTSAM_BUILD_TESTS=OFF -DGTSAM_BUILD_EXAMPLES_ALWAYS=OFF .. && ninja && sudo ninja install" }
 clean-ws = { cmd = "catkin clean -y" }
@@ -63,16 +77,19 @@ rviz = { cmd = "rviz" }
 roscore = { cmd = "roscore" }
 rqt = { cmd = "rqt --force-discover" }
 kmr-rviz = { cmd = "rviz -d $(rospack find kimera_vio_ros)/rviz/kimera_vio_euroc.rviz" }
-download-rerun = { cmd = "cd src && wget https://github.com/rerun-io/rerun/releases/download/0.24.0/rerun_cpp_sdk.zip && unzip rerun_cpp_sdk.zip && rm rerun_cpp_sdk.zip" }
-build-kmr = { cmd = "catkin build kimera_vio kimera_vio_ros" }
-play-euroc-m2 = { cmd = "cd /datasets/euroc && rosbag play --clock -s 30 MH_02_easy.bag" }
-play-euroc-m4 = { cmd = "cd /datasets/euroc && rosbag play --clock -s 15 MH_04_difficult.bag" }
+download-rerun = { cmd = "cd src && wget https://github.com/rerun-io/rerun/releases/download/0.28.1/rerun_cpp_sdk.zip && unzip rerun_cpp_sdk.zip && rm rerun_cpp_sdk.zip" }
+build-code = { cmd = "catkin build kimera_distributed kimera_vio_ros dpgo_ros" }
+play-euroc-m2 = { cmd = "cd /datasets_extra/euroc && rosbag play --clock -s 30 MH_02_easy.bag" }
+play-euroc-m4 = { cmd = "cd /datasets_extra/euroc && rosbag play --clock -s 15 MH_04_difficult.bag" }
 play-jackal = { cmd = "cd /datasets && rosbag play --clock -s 20 10_14_acl_jackal.bag" }
-play-square1-alpha = { cmd = "cd /datasets_extra/S3E/Square1 && rosbag play --clock -s 0 square1.bag" }
-play-square2-alpha = { cmd = "cd /datasets_extra/S3E/Square2 && rosbag play --clock -s 0 square2.bag" }
+play-square1 = { cmd = "cd /datasets_extra/S3E/Square1 && rosbag play --clock -s 0 square1.bag" }
+play-square2 = { cmd = "cd /datasets_extra/S3E/Square2 && rosbag play --clock -s 0 square2.bag" }
+play-playground1 = { cmd = "cd /datasets_extra/S3E && rosbag play --clock -s 0 playground1.bag" }
+play-library1 = { cmd = "cd /datasets_extra/S3E && rosbag play --clock -s 0 library1.bag" }
 play-graco-a8 = { cmd = "cd /datasets_extra/graco && rosbag play --clock -s 0 aerial-08-25m.bag" }
 play-graco-a7 = { cmd = "cd /datasets_extra/graco && rosbag play --clock -s 0 aerial-07-25m.bag" }
 play-graco-a5 = { cmd = "cd /datasets_extra/graco && rosbag play --clock -s 0 aerial-05-40m.bag" }
+play-graco-a6 = { cmd = "cd /datasets_extra/graco && rosbag play --clock -s 0 aerial-06-20m.bag" }
 play-graco-g1 = { cmd = "cd /datasets_extra/graco && rosbag play --clock -s 0 ground-01.bag" }
 play-graco-g2 = { cmd = "cd /datasets_extra/graco && rosbag play --clock -s 0 ground-02.bag" }
 play-graco-g3 = { cmd = "cd /datasets_extra/graco && rosbag play --clock -s 0 ground-03.bag" }
@@ -97,6 +114,7 @@ play-nc-01 = { cmd = "cd /datasets_extra/new_college/01_short_experiment && rosb
 play-spires-church = { cmd = "cd /datasets_extra/spires/christchurch && rosbag play --clock -s 0 church.bag /tf:= /tf_static:=" }
 download-onnx = { cmd = "wget https://codeload.github.com/microsoft/onnxruntime/zip/refs/tags/v1.22.0" }
 jupyter = { cmd = "jupyter lab" }
+setup-cuda = "sudo nvidia-cuda-mps-control -d && ps aux | grep nvidia-cuda-mps"
 
 [tasks.evo-ape]
 cmd = "evo_ape tum {{ gt }} $KIMERA_OUTPUT_PATH/{{ config }}/results/{{ method }}.txt -vap --plot_mode=xy --t_max_diff=0.2 --save_results $KIMERA_OUTPUT_PATH/{{ config }}/results/{{ method }}.zip"
@@ -335,8 +353,32 @@ args = [
   { "arg" = "robot", "default" = "acl_jackal" },
 ]
 
+[tasks.kmr-ee]
+cmd = "roslaunch kimera_vio_ros kimera_vio_eagle_xfeat.launch online:=true verbosity:={{ v }} debug:={{ debug }}"
+args = [{ "arg" = "v", "default" = "0" }, { "arg" = "debug", "default" = "0" }]
+
 [tasks.kmr-alpha]
 cmd = "roslaunch kimera_vio_ros kimera_vio_s3e_alpha_xfeat.launch online:=true verbosity:={{ v }} debug:={{ debug }}"
+args = [{ "arg" = "v", "default" = "0" }, { "arg" = "debug", "default" = "0" }]
+
+[tasks.kmr-bob]
+cmd = "roslaunch kimera_vio_ros kimera_vio_s3e_bob_xfeat.launch online:=true verbosity:={{ v }} debug:={{ debug }}"
+args = [{ "arg" = "v", "default" = "0" }, { "arg" = "debug", "default" = "0" }]
+
+[tasks.de-alpha-stereo]
+cmd = "roslaunch kimera_vio_ros kimera_vio_s3e_alpha_xfeat.launch online:=true config_type:=S3EAlphaStereoXfeat use_lcd:=2 verbosity:={{ v }} debug:={{ debug }}"
+args = [{ "arg" = "v", "default" = "0" }, { "arg" = "debug", "default" = "0" }]
+
+[tasks.de-bob-stereo]
+cmd = "roslaunch kimera_vio_ros kimera_vio_s3e_bob_xfeat.launch online:=true config_type:=S3EBobStereoXfeat use_lcd:=0 verbosity:={{ v }} debug:={{ debug }}"
+args = [{ "arg" = "v", "default" = "0" }, { "arg" = "debug", "default" = "0" }]
+
+[tasks.de-graco-stereo]
+cmd = "roslaunch kimera_vio_ros kimera_vio_graco_xfeat_stereo.launch online:=true use_lcd:=2 verbosity:={{ v }} debug:={{ debug }}"
+args = [{ "arg" = "v", "default" = "0" }, { "arg" = "debug", "default" = "0" }]
+
+[tasks.de-graco-gnd-stereo]
+cmd = "roslaunch kimera_vio_ros kimera_vio_graco_gnd_xfeat_stereo.launch online:=true use_lcd:=2 verbosity:={{ v }} debug:={{ debug }}"
 args = [{ "arg" = "v", "default" = "0" }, { "arg" = "debug", "default" = "0" }]
 
 [tasks.kmr-graco]
@@ -498,26 +540,121 @@ cmd = [
   "0",
 ]
 
+[tasks.build-kimera-multi]
+depends-on = [{ "task" = "build", "args" = ["kimera_multi"] }]
+cmd = ["echo 'Built Kimera Multi package.'"]
+
+[tasks.code-s3e]
+cmd = "roslaunch kimera_multi code_slam_double.launch"
+
+[tasks.code-graco]
+cmd = "roslaunch kimera_multi code_slam_double_graco.launch"
+
+[tasks.code-graco-3]
+cmd = "roslaunch kimera_multi code_slam_three_graco.launch"
+
+[tasks.code-graco-4]
+cmd = "roslaunch kimera_multi code_slam_four_graco.launch"
+
+[tasks.code-graco-12]
+cmd = "roslaunch kimera_multi code_slam_graco_12.launch"
+
+[tasks.code-graco-34]
+cmd = "roslaunch kimera_multi code_slam_graco_34.launch"
+
+[tasks.code-graco-gnd-123]
+cmd = "roslaunch kimera_multi code_slam_three_graco_gnd.launch"
+
+[tasks.code-graco-gnd-156]
+cmd = "roslaunch kimera_multi code_slam_graco_gnd_156.launch"
+
+[tasks.code-graco-gnd-2345]
+cmd = "roslaunch kimera_multi code_slam_graco_gnd_2345.launch"
+
+[tasks.cbs]
+cwd = "/workspaces/build/cbs/examples"
+cmd = [
+  # "gdb", "--args",
+  "./dpgo_g2o",
+  "--parallel=false",
+  "--dataset",
+  "{{dataset_dir}}/{{dataset}}",
+  "--output_dir",
+  "{{output_dir}}",
+  "--num_robots",
+  "{{nr}}",
+  "--step_size",
+  "10000",
+  "--comm",
+  "{{comm}}",
+  "--d_reset",
+  "{{d_reset}}",
+  "--contraction_alpha",
+  "{{contraction_alpha}}",
+  "--max_it",
+  "100",
+  "--stop",
+  "--visualize",
+  # "--anchor_first_key",
+  "--gamma",
+  "{{gamma}}",
+  "--max_pose_it",
+  "20",
+  # "--plot_detail_progress",
+  "--residual_epsilon",
+  "1e-5",
+]
+args = [
+  { arg = "dataset", default = "input_MITb_g2o.g2o" },
+  { arg = "nr", default = "5" },
+  { arg = "dataset_dir", default = "/workspaces/src/cbs/data" },
+  { arg = "output_dir", default = "output" },
+  { arg = "d_reset", default = "0.1" },
+  { arg = "contraction_alpha", default = "0.1" },
+  { arg = "gamma", default = "-0.1" },
+  { arg = "comm", default = "full" },
+]
 
 [dependencies]
 python = "3.11.*"
 pip = ">=25.2,<26"
 empy = ">=3.3.4,<4"
 catkin_pkg = ">=1.0.0,<2"
-gtsam = ">=4.2.0,<5"
 pycryptodomex = ">=3.23.0,<4"
 gnupg = ">=2.5.12,<3"
 rospkg = ">=1.6.0,<2"
 pyqt = ">=5.15.11,<6"
 # git = "*"
-# cmake = "<4"
+cmake = "3.30.*"
+zellij = ">=0.43.1,<0.44"
+evo = ">=1.34.2,<2"
+
+# cuvs = ">=25.12.0a76,<26"
+# cuda = ">=12.9.1,<13"
 
 [pypi-dependencies]
 tqdm = "*"
 imageio = "*"
 onnxsim = "*"
-torch = { version = "*", index = "https://download.pytorch.org/whl/cu124" }
-torchvision = { version = "*", index = "https://download.pytorch.org/whl/cu124" }
+torch = { version = "*", index = "https://download.pytorch.org/whl/cu129" }
+torchvision = { version = "*", index = "https://download.pytorch.org/whl/cu129" }
+opencv-python = "*"
+pafy = "*"
+youtube-dl = "*"
+scipy = "*"
+pandas = "*"
+easydict = "*"
+matplotlib = "*"
+h5py = "*"
+scikit-image = "*"
+timm = "==0.5.4"
+einops = "*"
+tensorrt-cu12 = "==10.13.0.35"
+# trimesh = "*"
+# joblib = "*"
+# open3d = "*"
+# transformations = "*"
+# onnxruntime-gpu = "*"
 
 [system-requirements]
 cuda = "12"

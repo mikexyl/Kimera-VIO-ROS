@@ -32,6 +32,12 @@
 		},
 		{
 			"path": "../../pose_graph_tools"
+		},
+		{
+			"path": "../../code-logs"
+		},
+		{
+			"path": "../../gtsam"
 		}
 	],
 	"settings": {}
