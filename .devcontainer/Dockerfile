@@ -38,7 +38,7 @@ RUN apt-get update && apt-get install -y \
     ros-$ROS_DISTRO-rqt-tf-tree \
     ros-$ROS_DISTRO-image-pipeline \
     libspdlog-dev libgraphviz-dev kitty \
-    libsuitesparse-dev \
+    libsuitesparse-dev tensorrt \
     libmetis-dev libgflags-dev libgoogle-glog-dev googletest \
     python3-catkin-tools libmkl-dev libblas-dev gdb libgsl-dev && \
     apt-get clean && \
@@ -50,7 +50,7 @@ RUN sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/loc
 # install develop tools
 RUN apt-get update && apt-get install -y \
     python3-vcstool \
-    python3-rosdep ccache ninja-build && \
+    python3-rosdep ccache ninja-build xterm && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 

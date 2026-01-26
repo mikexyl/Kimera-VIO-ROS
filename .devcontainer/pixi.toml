@@ -77,7 +77,7 @@ rviz = { cmd = "rviz" }
 roscore = { cmd = "roscore" }
 rqt = { cmd = "rqt --force-discover" }
 kmr-rviz = { cmd = "rviz -d $(rospack find kimera_vio_ros)/rviz/kimera_vio_euroc.rviz" }
-download-rerun = { cmd = "cd src && wget https://github.com/rerun-io/rerun/releases/download/0.28.1/rerun_cpp_sdk.zip && unzip rerun_cpp_sdk.zip && rm rerun_cpp_sdk.zip" }
+download-rerun = { cmd = "cd src && wget https://github.com/rerun-io/rerun/releases/download/0.28.2/rerun_cpp_sdk.zip && unzip rerun_cpp_sdk.zip && rm rerun_cpp_sdk.zip" }
 build-code = { cmd = "catkin build kimera_distributed kimera_vio_ros dpgo_ros" }
 play-euroc-m2 = { cmd = "cd /datasets_extra/euroc && rosbag play --clock -s 30 MH_02_easy.bag" }
 play-euroc-m4 = { cmd = "cd /datasets_extra/euroc && rosbag play --clock -s 15 MH_04_difficult.bag" }

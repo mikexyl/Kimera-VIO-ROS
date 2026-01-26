@@ -625,6 +625,9 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
 
   void visualizeCovisGraph(std::map<FrameId, FrameIdSet> covis_graph,
                            const Values& states) {
+    if (profile_ <= VisualizationProfile::Standard) {
+      return;
+    }
     NonlinearFactorGraph symbolic_graph;
     for (const auto& [key, neighbors] : covis_graph) {
       for (const auto& neighbor : neighbors) {
@@ -896,6 +899,7 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
 
   void publishLcdOutput(const LcdOutput::ConstPtr& lcd_output) override {
     if (lcd_output == nullptr) {
+      LOG(ERROR) << "LCD output is null";
       return;
     }
     this->setTimeNSec(lcd_output->timestamp_);
@@ -908,9 +912,8 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
                          Eigen::Vector4f(255, 255, 255, 150));
     }
 
-    // Draw pose graph for Debug profile
     auto opt_traj = lcd_output->states_;
-    if (not opt_traj.empty() && profile_ >= VisualizationProfile::Debug) {
+    if (not opt_traj.empty()) {
       this->drawFactors(map_ / "pose_graph",
                         lcd_output->nfg_,
                         lcd_output->states_,
@@ -920,6 +923,19 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
                         true);
 
       visualizeCovisGraph(lcd_output->covis_graph_, lcd_output->states_);
+
+      // compute the length of the trajectory
+      double traj_length = 0.0;
+      for (auto factor : lcd_output->nfg_) {
+        auto keys = factor->keys();
+        if (keys.size() != 2) continue;
+        auto between =
+            boost::dynamic_pointer_cast<gtsam::BetweenFactor<gtsam::Pose3>>(
+                factor);
+        if (not between) continue;
+        traj_length += between->measured().translation().norm();
+      }
+      this->drawScalar(robot_name_ + "/traj_length", traj_length);
     }
 
     // Visualize LCD keypoints
@@ -947,9 +963,10 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
 
       auto dist_to_color = [](double distance) {
         // Map distance to color (closer = blue, farther = red)
-        uint8_t r = static_cast<uint8_t>(std::min(255.0, distance * 3.0));
-        uint8_t g = 0;
-        uint8_t b = static_cast<uint8_t>(std::max(0.0, 255.0 - distance * 3.0));
+        static constexpr double kMaxDist = 50;
+        int r = 255 * std::min(1., distance / 50);
+        int g = 0;
+        int b = 255 * std::min(1., (1 - distance / 50));
         return rerun::Color(r, g, b);
       };
 

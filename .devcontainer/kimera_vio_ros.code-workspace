@@ -1,43 +1,54 @@
 {
 	"folders": [
 		{
+			"name": "xfeat-cpp",
 			"path": "../../xfeat-cpp"
 		},
 		{
+			"name": "Kimera-VIO",
 			"path": "../../Kimera-VIO"
 		},
 		{
+			"name": "Kimera-VIO-ROS",
 			"path": ".."
 		},
 		{
+			"name": "Kimera-Distributed",
 			"path": "../../Kimera-Distributed"
 		},
 		{
+			"name": "Kimera-Multi",
 			"path": "../../Kimera-Multi"
 		},
 		{
+			"name": "Kimera-Multi-LCD",
 			"path": "../../Kimera-Multi-LCD"
 		},
 		{
+			"name": "aria",
 			"path": "../../aria"
 		},
 		{
+			"name": "dpgo_ros",
 			"path": "../../dpgo_ros"
 		},
 		{
+			"name": "cbs",
 			"path": "../../cbs"
+		},
+		{
+			"name": "cbs_ros",
+			"path": "../../cbs_ros"
+		},
+		{
+			"name": "code-logs",
+			"path": "../../code-logs"
 		},
 		{
 			"path": "../../dpgo"
 		},
 		{
-			"path": "../../pose_graph_tools"
-		},
-		{
-			"path": "../../code-logs"
-		},
-		{
-			"path": "../../gtsam"
+			"path": "../../vilib"
 		}
 	],
 	"settings": {}

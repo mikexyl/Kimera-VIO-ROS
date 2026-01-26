@@ -1,19 +1,19 @@
 <launch>
- <arg name="camera_name" default="/camera/color/"/>
+  <arg name="camera_name" default="/camera/color/"/>
   <arg name="online" default="false" />
   <arg name="log_output" default="false"/>
   <arg name="rosbag_path" default="path" />
-  <arg name="config_type" default="D455" />
+  <arg name="config_type" default="M2DGRRS" />
   <arg name="seq" default="g1"/>
   <arg name="gt_csv_file" default=""/>
   <arg name="robot_id" default="0" />
   <param name="use_sim_time" value="true"/>
   <arg name="debug" default="0" />
-  <arg name="visualization_profile" default="2"/>
+  <arg name="visualization_profile" default="3"/>
 
   <arg name="do_coarse_temporal_sync" default="false"/>
   <arg name="do_fine_temporal_sync" default="false"/>
-  <arg name="use_external_odom" default="true"/>
+  <arg name="use_external_odom" default="false"/>
   <arg name="use_lcd" default="2"/>
   <arg name="lcd_no_optimize" default="false"/>
   <arg name="lcd_no_detection" default="false"/>
@@ -28,25 +28,36 @@
   <arg name="result_dir" value="$(find kimera_vio_ros)/output_logs/$(arg config_type)/$(arg seq)/results"/>
 
   <!-- Subscribed Topics -->
-  <arg name="left_cam_topic" value="/hathor/forward/infra1/image_rect_raw"/>
-  <arg name="right_cam_topic" value="/hathor/forward/infra2/image_rect_raw"/>
-  <arg name="imu_topic" value="/hathor/forward/imu" />
+  <arg name="left_cam_topic" value="/camera/color/image_raw"/>
+  <arg name="right_cam_topic" value="/camera/right/image_raw"/>
+  <arg name="imu_topic" value="/handsfree/imu" />
   <!-- Only used when parsing a rosbag -->
-  <arg name="external_odom_topic" value="/hathor/jackal_velocity_controller/odom"/>
+  <arg name="external_odom_topic" value="/jackal_velocity_controller/odom"/>
 
   <node pkg="image_transport" type="republish" name="image_republish" output="screen" args="compressed raw">
     <remap from="in" to="$(arg left_cam_topic)"/>
     <remap from="out" to="$(arg left_cam_topic)"/>
   </node>
 
-  <node pkg="image_transport" type="republish" name="image_republish_right" output="screen" args="compressed raw">
+  <!-- <node pkg="image_transport" type="republish" name="image_republish_right" output="screen" args="compressed raw">
     <remap from="in" to="$(arg right_cam_topic)"/>
     <remap from="out" to="$(arg right_cam_topic)"/>
-  </node>
+  </node> -->
+
+  <!-- <group ns="/camera/left">
+    <node name="image_proc_left" pkg="image_proc" type="image_proc" >
+    </node>
+  </group> -->
+<!-- 
+  <group ns="/camera/right">
+    <node name="image_proc_right" pkg="image_proc" type="image_proc" >
+    </node>
+  </group> -->
 
   <!-- Launch actual pipeline -->
   <include file="$(find kimera_vio_ros)/launch/kimera_vio_ros.launch" pass_all_args="true">
+    <!-- <arg name="left_cam_topic" value="/camera/color/image_raw"/> -->
+    <!-- <arg name="right_cam_topic" value="/camera/right/image_raw"/> -->
   </include>
-
 
 </launch>
