@@ -129,7 +129,8 @@ bool KimeraVioRos::runKimeraVio() {
       CHECK(nh_private_.getParam("robot_name", robot_name));
 
       std::string pointcloud_topic;
-      nh_private_.param("pointcloud_topic", pointcloud_topic, std::string("/points"));
+      nh_private_.param(
+          "pointcloud_topic", pointcloud_topic, std::string("/points"));
 
       RerunVisualizer::Params params{.base_link_frame_id = base_link_frame_id_,
                                      .odom_frame_id = odom_frame_id_,
@@ -241,9 +242,9 @@ bool KimeraVioRos::spin() {
     ros::WallRate rate(20);  // 20 Hz
     while (ros::ok() && !restart_vio_pipeline_) {
       const auto stats = vio_pipeline_->printStatistics();
-      if (!stats.empty()) {
-        LOG_EVERY_N(INFO, 20) << stats;
-      }
+      // if (!stats.empty()) {
+      //   LOG_EVERY_N(INFO, 20) << stats;
+      // }
 
       rate.sleep();
 

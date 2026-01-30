@@ -620,7 +620,7 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
     std::vector<Point3> lmk_points(landmarks.begin(), landmarks.end());
 
     this->drawPoints(
-        base_frame / "landmarks", lmk_points, {color}, {0.001}, {}, false);
+        base_frame / "landmarks", lmk_points, {color}, {0.001}, {}, true);
   }
 
   void visualizeCovisGraph(std::map<FrameId, FrameIdSet> covis_graph,
@@ -899,7 +899,6 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
 
   void publishLcdOutput(const LcdOutput::ConstPtr& lcd_output) override {
     if (lcd_output == nullptr) {
-      LOG(ERROR) << "LCD output is null";
       return;
     }
     this->setTimeNSec(lcd_output->timestamp_);
@@ -911,6 +910,12 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
                          lcd_output->landmarks_,
                          Eigen::Vector4f(255, 255, 255, 150));
     }
+
+    auto memory_bytes = lcd_output->frame_cache_memory_bytes_;
+    float memory_GB = memory_bytes / 1e9;
+    this->drawScalar(robot_name_ + "/resources/lcd_mem_usage", memory_GB);
+    this->drawScalar(robot_name_ + "/resources/lcd_num_frames",
+                     lcd_output->frame_cache_size_);
 
     auto opt_traj = lcd_output->states_;
     if (not opt_traj.empty()) {
@@ -936,23 +941,6 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
         traj_length += between->measured().translation().norm();
       }
       this->drawScalar(robot_name_ + "/traj_length", traj_length);
-    }
-
-    // Visualize LCD keypoints
-    if (!lcd_output->keypoints_3d_.empty()) {
-      // Draw 3D keypoints in the map frame
-      std::vector<Point3> kpts_3d(lcd_output->keypoints_3d_.begin(),
-                                  lcd_output->keypoints_3d_.end());
-      auto cyan_color = Eigen::Vector4f(0, 255, 255, 255);
-      this->drawPoints(map_ / "lcd" / "keypoints_3d",
-                       kpts_3d,
-                       {cyan_color},
-                       {2.0},
-                       {},
-                       false);
-
-      VLOG(3) << "Visualized " << lcd_output->keypoints_3d_.size()
-              << " LCD 3D keypoints";
     }
 
     if (!lcd_output->keypoints_2d_.empty()) {
@@ -997,6 +985,14 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
       throw std::runtime_error("Failed to open file: " + filename);
     }
 
+    // Determine delimiter based on file extension
+    std::filesystem::path filepath(filename);
+    std::string ext = filepath.extension().string();
+    char delimiter = ',';  // default to CSV
+    if (ext == ".txt" || ext == ".tum") {
+      delimiter = ' ';
+    }
+
     std::string line;
     while (std::getline(file, line)) {
       if (line.empty()) continue;
@@ -1005,13 +1001,27 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
       std::vector<double> values;
       std::string token;
 
-      while (std::getline(iss, token, ',')) {
-        try {
-          values.push_back(std::stod(token));
-        } catch (const std::invalid_argument&) {
+      if (delimiter == ' ') {
+        // For space-delimited files, use >> operator which handles multiple
+        // spaces
+        double val;
+        while (iss >> val) {
+          values.push_back(val);
+        }
+        if (iss.fail() && !iss.eof()) {
           std::cerr << "Invalid number in line: " << line << std::endl;
           values.clear();
-          break;
+        }
+      } else {
+        // For CSV files, use getline with comma delimiter
+        while (std::getline(iss, token, delimiter)) {
+          try {
+            values.push_back(std::stod(token));
+          } catch (const std::invalid_argument&) {
+            std::cerr << "Invalid number in line: " << line << std::endl;
+            values.clear();
+            break;
+          }
         }
       }
 

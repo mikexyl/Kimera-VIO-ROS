@@ -29,10 +29,6 @@
 			"path": "../../aria"
 		},
 		{
-			"name": "dpgo_ros",
-			"path": "../../dpgo_ros"
-		},
-		{
 			"name": "cbs",
 			"path": "../../cbs"
 		},
@@ -45,10 +41,7 @@
 			"path": "../../code-logs"
 		},
 		{
-			"path": "../../dpgo"
-		},
-		{
-			"path": "../../vilib"
+			"path": "../../pose_graph_tools"
 		}
 	],
 	"settings": {}

@@ -82,6 +82,7 @@ file and include this one to launch KimeraVIO on the dataset of your choice -->
   <!-- Empty string ("") means no ground-truth available. Used for init if
    requested to do ground-truth initialization. -->
   <arg name="external_odom_topic"               default=""/>
+  <arg name="output" default="screen"/>
 
   <!-- Frame IDs -->
   <arg name="odom_frame_id"      default="odom"/>
@@ -126,7 +127,7 @@ file and include this one to launch KimeraVIO on the dataset of your choice -->
 
   <!-- Launch main node  -->
   <node name="kimera_vio_ros_node" pkg="kimera_vio_ros" type="kimera_vio_ros_node"
-        output="screen" ns="kimera_vio_ros"
+        output="$(arg output)" ns="kimera_vio_ros"
         launch-prefix="$(arg launch_prefix)"
         required="$(arg close_on_error)"
         args="--use_lcd=$(arg use_lcd)
