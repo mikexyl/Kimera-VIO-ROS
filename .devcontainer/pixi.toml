@@ -598,8 +598,6 @@ cmd = [
   # "--anchor_first_key",
   "--gamma",
   "{{gamma}}",
-  "--max_pose_it",
-  "20",
   # "--plot_detail_progress",
   "--residual_epsilon",
   "1e-5",

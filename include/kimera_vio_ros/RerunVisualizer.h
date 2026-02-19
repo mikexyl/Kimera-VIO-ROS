@@ -305,16 +305,9 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
     cv::Mat tracking_image_clone =
         input.frontend_output_->getTrackingImage()->clone();
 
-    auto K = input.frontend_output_->getTrackingFrame()->cam_param_.K_;
-
-    // only draw every 3 frames
-    // if (input.backend_output_->cur_kf_id_ % 3 == 0) {
-    //   this->drawCamera(input.backend_output_->cur_kf_id_,
-    //                    input.backend_output_->W_State_Blkf_.pose_,
-    //                    tracking_image_clone,
-    //                    K,
-    //                    false);
-    // }
+    if (camera_K_.empty()) {
+      camera_K_ = input.frontend_output_->getTrackingFrame()->cam_param_.K_;
+    }
 
     // Draw tracking image for Standard and above
     if (profile_ >= VisualizationProfile::Standard &&
@@ -901,6 +894,7 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
     if (lcd_output == nullptr) {
       return;
     }
+
     this->setTimeNSec(lcd_output->timestamp_);
     this->drawTf(map_ / odom_, lcd_output->Map_Pose_Odom_, 0.3, false);
 
@@ -975,6 +969,19 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
       VLOG(3) << "Visualized " << lcd_output->keypoints_2d_.size()
               << " LCD 2D keypoints";
     }
+
+    visualizeSequences(lcd_output->seq_frames);
+    if (lcd_output->is_seq_frame) {
+      visualizeSeqFrame(lcd_output->debug_seq_frame.first,
+                        lcd_output->debug_seq_frame.second);
+    }
+
+    this->drawScalar(robot_name_ + "/lcd/S_coverge",
+                     lcd_output->coverage_score);
+    this->drawScalar(robot_name_ + "/lcd/S_struct",
+                     lcd_output->structure_score);
+    this->drawScalar(robot_name_ + "/lcd/S_covis",
+                     lcd_output->covisibility_score);
   }
 
   std::map<Timestamp, gtsam::Pose3> loadTrajectoryMapFromCSV(
@@ -1050,11 +1057,52 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
     return trajectory;
   }
 
+  void visualizeSequences(std::vector<std::vector<FrameId>> sequences) {
+    for (size_t i = 0; i < sequences.size(); ++i) {
+      std::vector<Point3> seq_points;
+      for (const auto& frame_id : sequences[i]) {
+        if (odom_states_.exists(frame_id)) {
+          Pose3 pose = odom_states_.at<Pose3>(frame_id);
+          seq_points.emplace_back(pose.x(), pose.y(), pose.z());
+        }
+      }
+      auto color = aria::viz::getRainbow(static_cast<int>(i));
+      this->drawPoints(map_ / "sequences" / fmt::format("seq_{}", i),
+                       seq_points,
+                       color,
+                       {0.05},
+                       {},
+                       false);
+    }
+  }
+
+  void visualizeSeqFrame(FrameId frame_id, cv::Mat frame_image) {
+    if (frame_image.empty()) {
+      return;
+    }
+    cv::Mat rgba32;
+    if (frame_image.type() == CV_8UC3) {
+      cv::cvtColor(frame_image, rgba32, cv::COLOR_BGR2RGBA);
+    } else if (frame_image.type() == CV_8UC1) {
+      cv::cvtColor(frame_image, rgba32, cv::COLOR_GRAY2RGBA);
+    } else if (frame_image.type() == CV_8UC4) {
+      rgba32 = frame_image;
+    } else {
+      throw std::runtime_error("Unsupported image type");
+    }
+
+    if (odom_states_.exists(frame_id)) {
+      drawCamera(frame_id, odom_states_.at<Pose3>(frame_id), rgba32, camera_K_);
+    }
+  }
+
  private:
   std::filesystem::path baselink_;
   std::filesystem::path map_;
   std::filesystem::path odom_;
   std::string robot_name_;
+
+  cv::Mat camera_K_;
 
   std::vector<Pose3> odom_traj_{};
   gtsam::Values odom_states_;
