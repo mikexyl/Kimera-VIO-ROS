@@ -128,19 +128,20 @@ bool KimeraVioRos::runKimeraVio() {
       std::string robot_name{};
       CHECK(nh_private_.getParam("robot_name", robot_name));
 
-      std::string pointcloud_topic;
-      nh_private_.param(
-          "pointcloud_topic", pointcloud_topic, std::string("/points"));
+      int robot_id = 0;
+      nh_private_.getParam("robot_id", robot_id);
 
-      RerunVisualizer::Params params{.base_link_frame_id = base_link_frame_id_,
-                                     .odom_frame_id = odom_frame_id_,
-                                     .map_frame_id = map_frame_id_,
-                                     .robot_name = robot_name,
-                                     .gt_csv_file = gt_csv_file,
-                                     .recording_id = time_str,
-                                     .result_dir = result_dir,
-                                     .profile = viz_profile,
-                                     .pointcloud_topic = pointcloud_topic};
+      RerunVisualizer::Params params{
+          .base_link_frame_id = base_link_frame_id_,
+          .odom_frame_id = odom_frame_id_,
+          .map_frame_id = map_frame_id_,
+          .robot_id = robot_id,
+          .robot_name = robot_name,
+          .gt_csv_file = gt_csv_file,
+          .recording_id = time_str,
+          .result_dir = result_dir,
+          .profile = viz_profile,
+      };
 
       visualizer_ = std::make_unique<RerunVisualizer>(params);
       ros_lcd_visualizer_ = std::make_unique<RosLoopClosureVisualizer>();

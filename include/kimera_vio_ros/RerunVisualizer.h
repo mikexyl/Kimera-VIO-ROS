@@ -95,12 +95,12 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
     std::string base_link_frame_id = "baselink";
     std::string odom_frame_id = "odom";
     std::string map_frame_id = "map";
+    int robot_id = 0;
     std::string robot_name = "robot0";
     std::string gt_csv_file = "";
     std::optional<std::string> recording_id = std::nullopt;
     std::string result_dir = "rerun_results";
     VisualizationProfile profile = VisualizationProfile::Standard;
-    std::string pointcloud_topic = "/points";
   };
 
   RerunVisualizer(const Params& params)
@@ -108,21 +108,21 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
                         params.odom_frame_id,
                         params.map_frame_id,
                         params.robot_name,
+                        params.robot_id,
                         params.gt_csv_file,
                         params.recording_id,
                         params.result_dir,
-                        params.profile,
-                        params.pointcloud_topic) {}
+                        params.profile) {}
 
   RerunVisualizer(std::string base_link_frame_id = "baselink",
                   std::string odom_frame_id = "odom",
                   std::string map_frame_id = "map",
                   std::string robot_name = "robot0",
+                  int robot_id = 0,
                   std::string gt_csv_file = "",
                   std::optional<std::string> recording_id = std::nullopt,
                   std::string result_dir = "",
-                  VisualizationProfile profile = VisualizationProfile::Standard,
-                  std::string pointcloud_topic = "/points")
+                  VisualizationProfile profile = VisualizationProfile::Standard)
       : VIO::Visualizer3D(VIO::VisualizationType::kNone),
         aria::viz::VisualizerRerun(aria::viz::VisualizerRerun::Params(
             "code-slam",
@@ -134,18 +134,9 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
         robot_name_(robot_name),
         result_dir_(result_dir),
         profile_(profile),
-        nh_(),
-        pointcloud_topic_(pointcloud_topic) {
+        robot_id_(robot_id) {
     // draw the origin frame for visualization
     this->drawTf(map_, Pose3::Identity(), 0.3, true);
-
-    // Subscribe to point cloud topic
-    if (!pointcloud_topic_.empty()) {
-      pointcloud_sub_ = nh_.subscribe(
-          pointcloud_topic_, 1, &RerunVisualizer::pointcloudCallback, this);
-      LOG(INFO) << "RerunVisualizer subscribed to point cloud topic: "
-                << pointcloud_topic_;
-    }
 
     if (not g_custom_sink) {
       AddGlogCustomSink([this](google::LogSeverity severity,
@@ -188,12 +179,6 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
   }
 
   virtual ~RerunVisualizer() = default;
-
-  // Point cloud callback
-  void pointcloudCallback(const sensor_msgs::PointCloud2ConstPtr& msg) {
-    std::lock_guard<std::mutex> lock(pointcloud_mutex_);
-    latest_pointcloud_msg_ = msg;
-  }
 
   // Hold the active custom sink so it persists for the program lifetime.
   static std::unique_ptr<CustomLogSink> g_custom_sink;
@@ -273,11 +258,13 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
   VIO::VisualizerOutput::UniquePtr spinOnce(
       const VIO::VisualizerInput& input) override {
     std::lock_guard<std::mutex> lock(rerun_mutex_);
-    this->setTimeNSec(input.timestamp_);
     this->drawTf(map_ / odom_ / baselink_,
                  input.backend_output_->W_State_Blkf_.pose_,
                  1.0,
                  false);
+
+    this->drawTf(fmt::format("map/{}/landmarks", robot_name_),
+                 input.backend_output_->T_W_B_.inverse());
 
     odom_traj_.push_back(input.backend_output_->W_State_Blkf_.pose_);
     odom_states_.insert(input.backend_output_->cur_kf_id_,
@@ -471,11 +458,6 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
     // Check if it's time to draw GT trajectory (every 5 seconds)
     this->checkAndDrawGtTraj(odom_states_, timestamp_map_);
 
-    // Visualize point cloud if available
-    if (profile_ >= VisualizationProfile::Debug) {
-      this->visualizePointCloud();
-    }
-
     this->publishLcdOutput(input.lcd_output_);
 
     return std::make_unique<VIO::VisualizerOutput>();
@@ -610,10 +592,13 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
   void visualizeLandmarks(std::filesystem::path base_frame,
                           const Landmarks& landmarks,
                           Eigen::Vector4f color) {
+    if (landmarks.empty()) {
+      return;
+    }
     std::vector<Point3> lmk_points(landmarks.begin(), landmarks.end());
 
     this->drawPoints(
-        base_frame / "landmarks", lmk_points, {color}, {0.001}, {}, true);
+        base_frame / "landmarks", lmk_points, {color}, {0.001}, {}, false);
   }
 
   void visualizeCovisGraph(std::map<FrameId, FrameIdSet> covis_graph,
@@ -685,94 +670,6 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
       }
       last_gt_draw_time_ = current_time;
     }
-  }
-
-  void visualizePointCloud() {
-    // Skip if no topic configured
-    if (pointcloud_topic_.empty()) {
-      return;
-    }
-
-    sensor_msgs::PointCloud2ConstPtr msg;
-    {
-      std::lock_guard<std::mutex> lock(pointcloud_mutex_);
-      if (!latest_pointcloud_msg_) {
-        return;
-      }
-      msg = latest_pointcloud_msg_;
-    }
-
-    // Convert ROS PointCloud2 to PCL
-    pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud(
-        new pcl::PointCloud<pcl::PointXYZRGB>);
-    pcl::fromROSMsg(*msg, *cloud);
-
-    if (cloud->empty()) {
-      return;
-    }
-
-    // Convert to rerun format
-    std::vector<rerun::Position3D> positions;
-    std::vector<rerun::Color> colors;
-    positions.reserve(cloud->size());
-    colors.reserve(cloud->size());
-
-    for (const auto& point : cloud->points) {
-      if (std::isfinite(point.x) && std::isfinite(point.y) &&
-          std::isfinite(point.z)) {
-        positions.emplace_back(point.x, point.y, point.z);
-        colors.emplace_back(point.r, point.g, point.b);
-      }
-    }
-
-    if (positions.empty()) {
-      return;
-    }
-
-    // #-- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
-    // -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
-    // #Transformation from left camera to lidar
-    // #-- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
-    // -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
-    //   Tlc:
-    //     !!opencv-matrix
-    //    rows: 4
-    //    cols: 4
-    //    dt: d
-    //    data: [0.017870010543876, -0.017600720528060,  0.999685389190047,
-    //    0.132943148638482,
-    //          -0.999728769020931, -0.015249506692405,  0.017602299211548,
-    //          0.201060820335298,
-    //           0.014934895883679, -0.999728796815682, -0.017868455512781,
-    //           -0.083131958281528, 0.0,                0.0, 0.0,
-    //           1.000000000000000]
-
-    gtsam::Pose3 T_pointcloud_cam(
-        gtsam::Rot3(0.017870010543876,
-                    -0.017600720528060,
-                    0.999685389190047,
-                    -0.999728769020931,
-                    -0.015249506692405,
-                    0.017602299211548,
-                    0.014934895883679,
-                    -0.999728796815682,
-                    -0.017868455512781),
-        gtsam::Point3(
-            0.132943148638482, 0.201060820335298, -0.083131958281528));
-    T_pointcloud_cam = T_pointcloud_cam.inverse();
-
-    drawTf(map_ / odom_ / baselink_ / "left_cam" / "lidar",
-           T_pointcloud_cam,
-           0.2,
-           false);
-
-    // Log point cloud to rerun
-    this->rec()->log(
-        (map_ / odom_ / baselink_ / "left_cam" / "lidar" / "pointcloud")
-            .c_str(),
-        rerun::Points3D(positions).with_colors(colors).with_radii({0.01f}));
-
-    VLOG(3) << "Visualized point cloud with " << positions.size() << " points";
   }
 
   void forceSaveTrajectories() {
@@ -895,15 +792,14 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
       return;
     }
 
-    this->setTimeNSec(lcd_output->timestamp_);
     this->drawTf(map_ / odom_, lcd_output->Map_Pose_Odom_, 0.3, false);
 
     // Draw LCD landmarks for Standard and above
-    if (profile_ >= VisualizationProfile::Standard) {
-      visualizeLandmarks(map_ / odom_,
-                         lcd_output->landmarks_,
-                         Eigen::Vector4f(255, 255, 255, 150));
-    }
+    auto agent_color = aria::viz::AgentColorMap::get(robot_id_ + 'a');
+    agent_color[3] = 150;  // set alpha to 200 for better visibility
+
+    visualizeLandmarks(
+        "map/" + robot_name_, lcd_output->landmarks_, agent_color);
 
     auto memory_bytes = lcd_output->frame_cache_memory_bytes_;
     float memory_GB = memory_bytes / 1e9;
@@ -1100,6 +996,7 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
   std::filesystem::path baselink_;
   std::filesystem::path map_;
   std::filesystem::path odom_;
+  int robot_id_;
   std::string robot_name_;
 
   cv::Mat camera_K_;
@@ -1139,13 +1036,6 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
   // Timer for GT trajectory drawing
   std::chrono::steady_clock::time_point last_gt_draw_time_;
   static constexpr std::chrono::seconds gt_draw_interval_{5};
-
-  // Point cloud subscriber
-  ros::NodeHandle nh_;
-  ros::Subscriber pointcloud_sub_;
-  std::string pointcloud_topic_;
-  sensor_msgs::PointCloud2ConstPtr latest_pointcloud_msg_;
-  std::mutex pointcloud_mutex_;
 };
 
 }  // namespace VIO

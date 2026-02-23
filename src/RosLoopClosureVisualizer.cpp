@@ -88,7 +88,6 @@ void RosLoopClosureVisualizer::publishLcdOutput(
     size_t pose_id = frames_.size() - 1;
     pose_graph_tools_msgs::VLCFrameMsg frame_msg;
     if (getFrameMsg(pose_id, frame_msg)) {
-      CHECK(!frame_msg.keypoints.empty());
       new_frames_msg_.frames.push_back(frame_msg);
     }
   }
@@ -472,46 +471,47 @@ bool RosLoopClosureVisualizer::getFrameMsg(
   frame_msg.robot_id = robot_id_;
   frame_msg.pose_id = pose_id;
 
-  CHECK(!frame.keypoints_2d_.empty());
-  CHECK_EQ(frame.keypoints_3d_.size(), frame.versors_.size());
-  CHECK_EQ(frame.keypoints_2d_.size(), frame.keypoints_3d_.size());
+  if (!frame.keypoints_2d_.empty()) {
+    CHECK_EQ(frame.keypoints_3d_.size(), frame.versors_.size());
+    CHECK_EQ(frame.keypoints_2d_.size(), frame.keypoints_3d_.size());
 
-  for (size_t i = 0; i < frame.keypoints_2d_.size(); ++i) {
-    // Push 2D keypoints
-    frame_msg.keypoints.push_back(frame.keypoints_2d_[i].x);
-    frame_msg.keypoints.push_back(frame.keypoints_2d_[i].y);
-  }
-
-  // Convert keypoints
-  pcl::PointCloud<pcl::PointXYZ> versors;
-  size_t valid_3d_keypoints = 0;
-  for (size_t i = 0; i < frame.keypoints_3d_.size(); ++i) {
-    // Push bearing vector
-    gtsam::Vector3 v_ = frame.versors_[i];
-    pcl::PointXYZ v(v_(0), v_(1), v_(2));
-    versors.push_back(v);
-    // Push keypoint depth
-    gtsam::Vector3 p_ = frame.keypoints_3d_[i];
-    if (p_.norm() < 1e-3) {
-      // This 3D keypoint is not valid
-      frame_msg.depths.push_back(0);
-    } else {
-      // We have valid 3D keypoint and the depth is given by the z component
-      // See sparseStereoReconstruction function in Stereo Matcher in
-      // Kimera-VIO.
-      frame_msg.depths.push_back(p_[2]);
-      valid_3d_keypoints++;
+    for (size_t i = 0; i < frame.keypoints_2d_.size(); ++i) {
+      // Push 2D keypoints
+      frame_msg.keypoints.push_back(frame.keypoints_2d_[i].x);
+      frame_msg.keypoints.push_back(frame.keypoints_2d_[i].y);
     }
-  }
-  pcl::toROSMsg(versors, frame_msg.versors);
 
-  // Convert descriptors
-  cv_bridge::CvImage cv_img;
-  // cv_img.header   = in_msg->header; // Yulun: need to set header
-  // explicitly?
-  cv_img.encoding = sensor_msgs::image_encodings::TYPE_32FC1;
-  cv_img.image = frame.descriptors_mat_;
-  cv_img.toImageMsg(frame_msg.descriptors_mat);
+    // Convert keypoints
+    pcl::PointCloud<pcl::PointXYZ> versors;
+    size_t valid_3d_keypoints = 0;
+    for (size_t i = 0; i < frame.keypoints_3d_.size(); ++i) {
+      // Push bearing vector
+      gtsam::Vector3 v_ = frame.versors_[i];
+      pcl::PointXYZ v(v_(0), v_(1), v_(2));
+      versors.push_back(v);
+      // Push keypoint depth
+      gtsam::Vector3 p_ = frame.keypoints_3d_[i];
+      if (p_.norm() < 1e-3) {
+        // This 3D keypoint is not valid
+        frame_msg.depths.push_back(0);
+      } else {
+        // We have valid 3D keypoint and the depth is given by the z component
+        // See sparseStereoReconstruction function in Stereo Matcher in
+        // Kimera-VIO.
+        frame_msg.depths.push_back(p_[2]);
+        valid_3d_keypoints++;
+      }
+    }
+    pcl::toROSMsg(versors, frame_msg.versors);
+
+    // Convert descriptors
+    cv_bridge::CvImage cv_img;
+    // cv_img.header   = in_msg->header; // Yulun: need to set header
+    // explicitly?
+    cv_img.encoding = sensor_msgs::image_encodings::TYPE_32FC1;
+    cv_img.image = frame.descriptors_mat_;
+    cv_img.toImageMsg(frame_msg.descriptors_mat);
+  }
 
   CHECK(!frame.T_base_cam_.equals(gtsam::Pose3::Identity(), 1e-6));
 
