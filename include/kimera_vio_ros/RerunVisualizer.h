@@ -878,6 +878,8 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
                      lcd_output->structure_score);
     this->drawScalar(robot_name_ + "/lcd/S_covis",
                      lcd_output->covisibility_score);
+    this->drawScalar(robot_name_ + "/lcd/S_penalty",
+                     lcd_output->similarity_penalty);
   }
 
   std::map<Timestamp, gtsam::Pose3> loadTrajectoryMapFromCSV(
