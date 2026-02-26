@@ -504,12 +504,12 @@ bool RosLoopClosureVisualizer::getFrameMsg(
     }
     pcl::toROSMsg(versors, frame_msg.versors);
 
-    // Convert descriptors
+    // Convert descriptors (FP32 -> FP16 for bandwidth reduction)
+    cv::Mat descriptors_fp16;
+    cv::convertFp16(frame.descriptors_mat_, descriptors_fp16);
     cv_bridge::CvImage cv_img;
-    // cv_img.header   = in_msg->header; // Yulun: need to set header
-    // explicitly?
-    cv_img.encoding = sensor_msgs::image_encodings::TYPE_32FC1;
-    cv_img.image = frame.descriptors_mat_;
+    cv_img.encoding = sensor_msgs::image_encodings::TYPE_16SC1;
+    cv_img.image = descriptors_fp16;
     cv_img.toImageMsg(frame_msg.descriptors_mat);
   }
 
