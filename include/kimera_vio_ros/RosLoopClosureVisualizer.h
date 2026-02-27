@@ -109,6 +109,7 @@ class RosLoopClosureVisualizer : public LoopClosureVisualizer {
     decltype(LcdOutput::bow_vec_) bow_vec_;
     VIO::OrbDescriptor descriptors_mat_;
     Pose3 T_base_cam_;
+    std::vector<float> scores_;
 
     explicit lcd_frame(const LcdOutput& lcd_output)
         : keypoints_2d_(lcd_output.keypoints_2d_),
@@ -118,6 +119,16 @@ class RosLoopClosureVisualizer : public LoopClosureVisualizer {
           descriptors_mat_(lcd_output.descriptors_mat_) {
       timestamp_ns_ = lcd_output.timestamp_kf_;
       T_base_cam_ = lcd_output.T_base_cam_;
+      scores_.resize(3);
+      scores_[0] = lcd_output.similarity_penalty;
+      scores_[1] = lcd_output.coverage_score;
+      scores_[2] = lcd_output.structure_score;
+
+      if (!bow_vec_.empty()) {
+        CHECK(scores_[0] != 0);
+        CHECK(scores_[1] != 0);
+        CHECK(scores_[2] != 0);
+      }
     }
   };
 

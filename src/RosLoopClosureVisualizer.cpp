@@ -400,6 +400,13 @@ void RosLoopClosureVisualizer::processBowQuery() {
   bow_msg.robot_id = robot_id_;
   bow_msg.pose_id = pose_id;
   bow_msg.bow_vector = bow_vec_msg;
+  bow_msg.bow_vector.scores = frames_.back().scores_;
+  if (frames_.back().bow_vec_.size() > 0) {
+    CHECK(frames_.back().scores_.size() == 3);
+    CHECK(frames_.back().scores_[0] != 0);
+    CHECK(frames_.back().scores_[1] != 0);
+    CHECK(frames_.back().scores_[2] != 0);
+  }
   bow_msg.header.stamp = ros::Time().fromNSec(frames_.back().timestamp_ns_);
   for (uint16_t robot_id = 0; robot_id <= robot_id_; ++robot_id) {
     bow_queries_[robot_id].queries.push_back(bow_msg);
