@@ -798,8 +798,8 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
     auto agent_color = aria::viz::AgentColorMap::get(robot_id_ + 'a');
     agent_color[3] = 150;  // set alpha to 200 for better visibility
 
-    visualizeLandmarks(
-        "map/" + robot_name_, lcd_output->landmarks_, agent_color);
+    // visualizeLandmarks(
+    // "map/" + robot_name_, lcd_output->landmarks_, agent_color);
 
     auto memory_bytes = lcd_output->frame_cache_memory_bytes_;
     float memory_GB = memory_bytes / 1e9;
@@ -807,64 +807,31 @@ class RerunVisualizer : public Visualizer3D, aria::viz::VisualizerRerun {
     this->drawScalar(robot_name_ + "/resources/lcd_num_frames",
                      lcd_output->frame_cache_size_);
 
-    auto opt_traj = lcd_output->states_;
-    if (not opt_traj.empty()) {
-      this->drawFactors(map_ / "pose_graph",
-                        lcd_output->nfg_,
-                        lcd_output->states_,
-                        getColorsFromFactorsType(lcd_output->nfg_),
-                        1.f,
-                        false,
-                        true);
+    // auto opt_traj = lcd_output->states_;
+    // if (not opt_traj.empty()) {
+    //   this->drawFactors(map_ / "pose_graph",
+    //                     lcd_output->nfg_,
+    //                     lcd_output->states_,
+    //                     getColorsFromFactorsType(lcd_output->nfg_),
+    //                     1.f,
+    //                     false,
+    //                     true);
 
-      visualizeCovisGraph(lcd_output->covis_graph_, lcd_output->states_);
+    //   visualizeCovisGraph(lcd_output->covis_graph_, lcd_output->states_);
 
-      // compute the length of the trajectory
-      double traj_length = 0.0;
-      for (auto factor : lcd_output->nfg_) {
-        auto keys = factor->keys();
-        if (keys.size() != 2) continue;
-        auto between =
-            boost::dynamic_pointer_cast<gtsam::BetweenFactor<gtsam::Pose3>>(
-                factor);
-        if (not between) continue;
-        traj_length += between->measured().translation().norm();
-      }
-      this->drawScalar(robot_name_ + "/traj_length", traj_length);
-    }
-
-    if (!lcd_output->keypoints_2d_.empty()) {
-      // Draw 2D keypoints as image points
-      std::vector<rerun::Position2D> kpts_2d_positions;
-      kpts_2d_positions.reserve(lcd_output->keypoints_2d_.size());
-      std::vector<rerun::Color> colors;
-
-      auto dist_to_color = [](double distance) {
-        // Map distance to color (closer = blue, farther = red)
-        static constexpr double kMaxDist = 50;
-        int r = 255 * std::min(1., distance / 50);
-        int g = 0;
-        int b = 255 * std::min(1., (1 - distance / 50));
-        return rerun::Color(r, g, b);
-      };
-
-      for (int i = 0; i < lcd_output->keypoints_2d_.size(); ++i) {
-        const auto& kpt = lcd_output->keypoints_2d_[i];
-        kpts_2d_positions.emplace_back(kpt.x, kpt.y);
-
-        auto kp_3d = lcd_output->keypoints_3d_.at(i);
-        double distance = kp_3d.norm();
-        colors.push_back(dist_to_color(distance));
-      }
-
-      this->rec()->log((robot_name_ + "/lcd/keypoints_2d").c_str(),
-                       rerun::Points2D(kpts_2d_positions)
-                           .with_radii({3.0f})
-                           .with_colors(colors));
-
-      VLOG(3) << "Visualized " << lcd_output->keypoints_2d_.size()
-              << " LCD 2D keypoints";
-    }
+    //   // compute the length of the trajectory
+    //   double traj_length = 0.0;
+    //   for (auto factor : lcd_output->nfg_) {
+    //     auto keys = factor->keys();
+    //     if (keys.size() != 2) continue;
+    //     auto between =
+    //         boost::dynamic_pointer_cast<gtsam::BetweenFactor<gtsam::Pose3>>(
+    //             factor);
+    //     if (not between) continue;
+    //     traj_length += between->measured().translation().norm();
+    //   }
+    //   this->drawScalar(robot_name_ + "/traj_length", traj_length);
+    // }
 
     visualizeSequences(lcd_output->seq_frames);
     if (lcd_output->is_seq_frame) {
