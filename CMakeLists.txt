@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(catkin_simple REQUIRED)
+find_package(cbs REQUIRED)
 
 ### System Dependencies
 find_package(Boost REQUIRED COMPONENTS
@@ -41,7 +42,7 @@ cs_add_library(${PROJECT_NAME}
   src/utils/UtilsRos.cpp
   src/utils/CsvPublisher.cpp
 )
-target_link_libraries(${PROJECT_NAME} kimera_vio)
+target_link_libraries(${PROJECT_NAME} kimera_vio cbs)
 
 cs_add_executable(${PROJECT_NAME}_node
   src/KimeraVioRosNode.cpp

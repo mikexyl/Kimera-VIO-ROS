@@ -175,7 +175,16 @@ void RosVisualizer::publishPoseBelief(const BackendOutput::ConstPtr& output) {
     belief.mu[i] = pose_mu(i);
   }
 
-  const gtsam::Matrix6 pose_cov = sanitizePoseCovariance(output->state_covariance_lkf_);
+  if (!output->pose_belief_local_covariance_valid_) {
+    LOG_EVERY_N(WARNING, 100)
+        << "Skipping CBS belief publish because local-only covariance is not "
+           "available for keyframe "
+        << output->cur_kf_id_ << ".";
+    return;
+  }
+
+  const gtsam::Matrix6 pose_cov =
+      sanitizePoseCovariance(output->pose_belief_local_covariance_lkf_);
   for (size_t r = 0u; r < 6u; ++r) {
     for (size_t c = 0u; c < 6u; ++c) {
       belief.covariance[r * 6u + c] = pose_cov(r, c);

@@ -8,6 +8,7 @@
   <arg name="use_kimera_rviz" default="true"/>
   <arg name="use_liorf_rviz" default="false"/>
   <arg name="enable_cbs_bridge" default="true"/>
+  <arg name="cbs_use_bpsam_for_local_belief_covariance" default="false"/>
 
   <include file="$(find liorf)/launch/run_lio_sam_s3e_alpha.launch">
     <arg name="use_rviz" value="$(arg use_liorf_rviz)"/>
@@ -20,6 +21,8 @@
     <arg name="cbs_belief_bridge_enable" value="$(arg enable_cbs_bridge)"/>
     <arg name="cbs_belief_in_topic" value="/kimera/cbs/belief_in"/>
     <arg name="cbs_belief_out_topic" value="/kimera/cbs/belief_out"/>
+    <arg name="cbs_use_bpsam_for_local_belief_covariance"
+         value="$(arg cbs_use_bpsam_for_local_belief_covariance)"/>
   </include>
 
   <node if="$(arg play_bag)"

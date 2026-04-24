@@ -44,6 +44,7 @@ file and include this one to launch KimeraVIO on the dataset of your choice -->
   <arg name="cbs_belief_in_topic" default="/kimera/cbs/belief_in"/>
   <arg name="cbs_belief_out_topic" default="/kimera/cbs/belief_out"/>
   <arg name="cbs_belief_forward_queue_limit" default="800"/>
+  <arg name="cbs_use_bpsam_for_local_belief_covariance" default="false"/>
   <!-- If true, KimeraVIO will compute a static offset between the
        latest IMU and camera measurement -->
   <arg name="do_coarse_temporal_sync" default="false"/>
@@ -151,7 +152,8 @@ file and include this one to launch KimeraVIO on the dataset of your choice -->
               --lcd_disable_stereo_match_depth_check=$(arg lcd_disable_stereo_match_depth_check)
               --no_incremental_pose=$(arg no_incremental_pose)
               --viz_type=$(arg viz_type)
-              --visualize=$(arg visualize)">
+              --visualize=$(arg visualize)
+              --cbs_use_bpsam_for_local_belief_covariance=$(arg cbs_use_bpsam_for_local_belief_covariance)">
     <param name="image_transport" value="$(arg rgb_image_transport)"/>
     <param name="params_folder_path"    value="$(arg params_folder)"/>
     <param name="sensor_params_folder_path" value="$(arg sensor_folder)"/>
