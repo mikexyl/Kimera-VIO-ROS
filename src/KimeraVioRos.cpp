@@ -6,6 +6,8 @@
 
 #include "kimera_vio_ros/KimeraVioRos.h"
 
+#include <algorithm>
+#include <functional>
 #include <future>
 
 // Still need gflags for parameters in VIO
@@ -67,6 +69,12 @@ KimeraVioRos::KimeraVioRos()
     VLOG(1) << "Using split parameter paths for general and sensor parameters";
     vio_params_ = std::make_shared<VioParams>(params_path, sensor_params_path);
   }
+
+  int cbs_forward_queue_limit = 800;
+  nh_private_.param<int>(
+      "cbs_belief_forward_queue_limit", cbs_forward_queue_limit, 800);
+  external_beliefs_queue_limit_ =
+      static_cast<size_t>(std::max(1, cbs_forward_queue_limit));
 }
 
 #undef MAKE_CONFIG_FILEPATH
@@ -81,6 +89,11 @@ KimeraVioRos::~KimeraVioRos() {
 }
 
 bool KimeraVioRos::runKimeraVio() {
+  {
+    std::lock_guard<std::mutex> lock(external_beliefs_mutex_);
+    pending_external_beliefs_.clear();
+  }
+
   // First, destroy VIO pipeline, this will in turn call the shutdown of
   // the data provider.
   // NOTE: had the data provider been destroyed before, the vio would be calling
@@ -94,6 +107,8 @@ bool KimeraVioRos::runKimeraVio() {
     CHECK(vio_params_);
     ros_display_ = std::make_unique<RosDisplay>();
     ros_visualizer_ = std::make_unique<RosVisualizer>(*vio_params_);
+    ros_visualizer_->registerIncomingBeliefsCallback(std::bind(
+        &KimeraVioRos::bufferExternalBeliefs, this, std::placeholders::_1));
   } else {
     ros_display_ = nullptr;
     ros_visualizer_ = nullptr;
@@ -200,6 +215,8 @@ bool KimeraVioRos::spin() {
     // Run while ROS is ok and vio pipeline is not shutdown.
     ros::WallRate rate(20);  // 20 Hz
     while (ros::ok() && !restart_vio_pipeline_) {
+      flushExternalBeliefsToPipeline();
+
       const auto stats = vio_pipeline_->printStatistics();
       if (!stats.empty()) {
         LOG_EVERY_N(INFO, 20) << stats;
@@ -240,6 +257,8 @@ bool KimeraVioRos::spin() {
   } else {
     ros::start();
     while (ros::ok() && data_provider_->spin() && vio_pipeline_->spin()) {
+      flushExternalBeliefsToPipeline();
+
       // TODO(Toni): right now this will loop forwever unless ROS dies or Ctrl+C
       LOG(INFO) << vio_pipeline_->printStatistics();
       vio_pipeline_->spinViz();
@@ -326,6 +345,41 @@ void KimeraVioRos::connectVIO() {
         ros_lcd_visualizer_->publishLcdOutput(msg);
       }
     });
+  }
+}
+
+void KimeraVioRos::bufferExternalBeliefs(
+    const std::vector<ExternalPoseBelief>& beliefs) {
+  if (beliefs.empty()) {
+    return;
+  }
+
+  std::lock_guard<std::mutex> lock(external_beliefs_mutex_);
+  for (const auto& belief : beliefs) {
+    pending_external_beliefs_.push_back(belief);
+  }
+  while (pending_external_beliefs_.size() > external_beliefs_queue_limit_) {
+    pending_external_beliefs_.pop_front();
+  }
+}
+
+void KimeraVioRos::flushExternalBeliefsToPipeline() {
+  if (!vio_pipeline_) {
+    return;
+  }
+
+  std::vector<ExternalPoseBelief> beliefs_to_forward;
+  {
+    std::lock_guard<std::mutex> lock(external_beliefs_mutex_);
+    beliefs_to_forward.reserve(pending_external_beliefs_.size());
+    while (!pending_external_beliefs_.empty()) {
+      beliefs_to_forward.push_back(pending_external_beliefs_.front());
+      pending_external_beliefs_.pop_front();
+    }
+  }
+
+  if (!beliefs_to_forward.empty()) {
+    vio_pipeline_->enqueueExternalPoseBeliefs(beliefs_to_forward);
   }
 }
 

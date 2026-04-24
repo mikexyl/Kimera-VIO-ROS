@@ -1,0 +1,31 @@
+<launch>
+  <arg name="bag_path"
+       default="/workspaces/cbs_fresh_ws/datasets/S3E/S3E_Square_1/S3E_Square_1_alpha_ros1.bag"/>
+  <arg name="play_bag" default="true"/>
+  <arg name="bag_rate" default="1.0"/>
+  <arg name="bag_start" default="0.0"/>
+
+  <arg name="use_kimera_rviz" default="true"/>
+  <arg name="use_liorf_rviz" default="false"/>
+  <arg name="enable_cbs_bridge" default="true"/>
+
+  <include file="$(find liorf)/launch/run_lio_sam_s3e_alpha.launch">
+    <arg name="use_rviz" value="$(arg use_liorf_rviz)"/>
+  </include>
+
+  <include file="$(find kimera_vio_ros)/launch/kimera_vio_ros_s3e_alpha_mono.launch">
+    <arg name="online" value="true"/>
+    <arg name="should_use_sim_time" value="true"/>
+    <arg name="use_rviz" value="$(arg use_kimera_rviz)"/>
+    <arg name="cbs_belief_bridge_enable" value="$(arg enable_cbs_bridge)"/>
+    <arg name="cbs_belief_in_topic" value="/kimera/cbs/belief_in"/>
+    <arg name="cbs_belief_out_topic" value="/kimera/cbs/belief_out"/>
+  </include>
+
+  <node if="$(arg play_bag)"
+        pkg="rosbag"
+        type="play"
+        name="s3e_bag_play"
+        output="screen"
+        args="--clock --rate=$(arg bag_rate) --start=$(arg bag_start) $(arg bag_path)"/>
+</launch>

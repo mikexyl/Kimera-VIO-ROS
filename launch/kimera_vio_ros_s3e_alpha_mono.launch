@@ -1,0 +1,53 @@
+<launch>
+  <arg name="dataset_name" value="S3EAlphaMonoXfeat"/>
+  <arg name="multirobot" default="true"/>
+  <arg name="verbosity" default="0"/>
+  <arg name="do_coarse_temporal_sync" default="false"/>
+  <arg name="do_fine_temporal_sync" default="false"/>
+
+  <!-- Set online to true if rosbag play or live sensors are used. -->
+  <arg name="online" default="true"/>
+  <arg name="should_use_sim_time" default="true"/>
+  <param name="use_sim_time" value="$(arg should_use_sim_time)"/>
+
+  <arg name="log_output" default="false"/>
+  <arg name="log_gt_data" default="false"/>
+  <arg name="gt_topic" default=""/>
+  <arg name="rosbag_path" default="" unless="$(arg online)"/>
+
+  <arg name="left_cam_topic" default="/Alpha/left_camera/image_raw"/>
+  <arg name="left_cam_compressed_topic" default="/Alpha/left_camera/compressed"/>
+  <arg name="right_cam_topic" default=""/>
+  <arg name="imu_topic" default="/Alpha/imu/data"/>
+  <arg name="external_odom_topic" default=""/>
+  <arg name="rgb_image_transport" default="raw"/>
+  <arg name="decode_left_compressed" default="true"/>
+
+  <arg name="odom_frame_id" default="odom"/>
+  <arg name="base_link_frame_id" default="imu_link"/>
+  <arg name="map_frame_id" default="map"/>
+  <arg name="left_cam_frame_id" default="left_camera"/>
+  <arg name="right_cam_frame_id" default="right_camera"/>
+
+  <arg name="use_lcd" default="false"/>
+  <arg name="visualize" default="true"/>
+  <arg name="use_rviz" default="true"/>
+
+  <arg name="cbs_belief_bridge_enable" default="true"/>
+  <arg name="cbs_belief_in_topic" default="/kimera/cbs/belief_in"/>
+  <arg name="cbs_belief_out_topic" default="/kimera/cbs/belief_out"/>
+  <arg name="cbs_belief_forward_queue_limit" default="800"/>
+
+  <node if="$(arg decode_left_compressed)"
+        pkg="kimera_vio_ros"
+        type="compressed_to_raw_bridge.py"
+        name="alpha_left_compressed_bridge"
+        output="screen">
+    <param name="input_topic" value="$(arg left_cam_compressed_topic)"/>
+    <param name="output_topic" value="$(arg left_cam_topic)"/>
+    <param name="output_encoding" value="mono8"/>
+  </node>
+
+  <include file="$(find kimera_vio_ros)/launch/kimera_vio_ros.launch"
+           pass_all_args="true"/>
+</launch>

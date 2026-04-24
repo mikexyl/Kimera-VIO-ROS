@@ -27,6 +27,8 @@
 #include <tf/transform_broadcaster.h>
 #include <tf2/buffer_core.h>
 
+#include <algorithm>
+#include <cmath>
 #include <string>
 
 #include "kimera_vio_ros/utils/UtilsRos.h"
@@ -34,6 +36,23 @@
 DECLARE_int32(viz_type);
 
 namespace VIO {
+
+namespace {
+gtsam::Matrix6 sanitizePoseCovariance(const gtsam::Matrix& state_covariance) {
+  gtsam::Matrix6 pose_cov = gtsam::Matrix6::Identity() * 1e-3;
+  if (state_covariance.rows() >= 6 && state_covariance.cols() >= 6) {
+    pose_cov = gtsam::sub(state_covariance, 0, 6, 0, 6);
+  }
+
+  pose_cov = 0.5 * (pose_cov + pose_cov.transpose());
+  for (size_t i = 0u; i < 6u; ++i) {
+    if (!std::isfinite(pose_cov(i, i)) || pose_cov(i, i) <= 1e-9) {
+      pose_cov(i, i) = 1e-3;
+    }
+  }
+  return pose_cov;
+}
+}  // namespace
 
 RosVisualizer::RosVisualizer(const VioParams& vio_params)
     // I'm not sure we use this flag in ROS?
@@ -55,6 +74,15 @@ RosVisualizer::RosVisualizer(const VioParams& vio_params)
   CHECK(nh_private_.getParam("map_frame_id", map_frame_id_));
   CHECK(!map_frame_id_.empty());
 
+  nh_private_.param("cbs_belief_bridge_enable", cbs_belief_bridge_enable_, true);
+  std::string cbs_agent_id;
+  nh_private_.param<std::string>("cbs_agent_id", cbs_agent_id, "k");
+  cbs_agent_id_ = resolveAgentId(cbs_agent_id);
+  nh_private_.param<std::string>(
+      "cbs_belief_in_topic", cbs_belief_in_topic_, "kimera/cbs/belief_in");
+  nh_private_.param<std::string>(
+      "cbs_belief_out_topic", cbs_belief_out_topic_, "kimera/cbs/belief_out");
+
   // Publishers
   odometry_pub_ = nh_.advertise<nav_msgs::Odometry>("odometry", 1, true);
   frontend_stats_pub_ =
@@ -64,6 +92,27 @@ RosVisualizer::RosVisualizer(const VioParams& vio_params)
   pointcloud_pub_ =
       nh_.advertise<PointCloudXYZRGB>("time_horizon_pointcloud", 1, true);
   mesh_3d_frame_pub_ = nh_.advertise<pcl_msgs::PolygonMesh>("mesh", 1, true);
+  if (cbs_belief_bridge_enable_) {
+    pose_belief_out_pub_ =
+        nh_.advertise<liorf::pose_belief_array>(cbs_belief_out_topic_, 50);
+    pose_belief_in_sub_ = nh_.subscribe<liorf::pose_belief_array>(
+        cbs_belief_in_topic_,
+        50,
+        &RosVisualizer::poseBeliefInCallback,
+        this,
+        ros::TransportHints().tcpNoDelay());
+    ROS_INFO_STREAM("Kimera belief bridge enabled. agent='"
+                    << static_cast<char>(cbs_agent_id_) << "', in='"
+                    << cbs_belief_in_topic_ << "', out='"
+                    << cbs_belief_out_topic_ << "'.");
+  } else {
+    ROS_INFO("Kimera belief bridge disabled.");
+  }
+}
+
+uint8_t RosVisualizer::resolveAgentId(const std::string& agent_id) {
+  return agent_id.empty() ? static_cast<uint8_t>('k')
+                          : static_cast<uint8_t>(agent_id.front());
 }
 
 VisualizerOutput::UniquePtr RosVisualizer::spinOnce(
@@ -96,6 +145,77 @@ void RosVisualizer::publishBackendOutput(
   }
   if (pointcloud_pub_.getNumSubscribers() > 0) {
     publishTimeHorizonPointCloud(output);
+  }
+  if (cbs_belief_bridge_enable_) {
+    publishPoseBelief(output);
+  }
+}
+
+void RosVisualizer::publishPoseBelief(const BackendOutput::ConstPtr& output) {
+  CHECK(output);
+  if (!cbs_belief_bridge_enable_) {
+    return;
+  }
+
+  liorf::pose_belief_array msg;
+  msg.header.stamp.fromNSec(output->timestamp_);
+  msg.header.frame_id = odom_frame_id_;
+
+  liorf::pose_belief belief;
+  belief.header = msg.header;
+  belief.source_agent = cbs_agent_id_;
+  belief.pose_index = output->cur_kf_id_ >= 0
+                          ? static_cast<uint32_t>(output->cur_kf_id_)
+                          : 0u;
+  belief.stamp_sec = msg.header.stamp.toSec();
+  belief.relax_factor = 0.0;
+
+  const gtsam::Vector6 pose_mu = gtsam::Pose3::Logmap(output->W_State_Blkf_.pose_);
+  for (size_t i = 0u; i < belief.mu.size(); ++i) {
+    belief.mu[i] = pose_mu(i);
+  }
+
+  const gtsam::Matrix6 pose_cov = sanitizePoseCovariance(output->state_covariance_lkf_);
+  for (size_t r = 0u; r < 6u; ++r) {
+    for (size_t c = 0u; c < 6u; ++c) {
+      belief.covariance[r * 6u + c] = pose_cov(r, c);
+    }
+  }
+
+  msg.beliefs.push_back(belief);
+  pose_belief_out_pub_.publish(msg);
+}
+
+void RosVisualizer::poseBeliefInCallback(
+    const liorf::pose_belief_arrayConstPtr& msg) {
+  if (!msg || !incoming_beliefs_callback_) {
+    return;
+  }
+
+  std::vector<ExternalPoseBelief> converted_beliefs;
+  converted_beliefs.reserve(msg->beliefs.size());
+  for (const auto& belief : msg->beliefs) {
+    if (belief.source_agent == cbs_agent_id_) {
+      continue;
+    }
+
+    ExternalPoseBelief converted;
+    converted.source_agent = belief.source_agent;
+    converted.pose_index = belief.pose_index;
+    converted.stamp_sec =
+        belief.stamp_sec > 0.0 ? belief.stamp_sec : belief.header.stamp.toSec();
+    converted.relax_factor = belief.relax_factor;
+    for (size_t i = 0u; i < converted.mu.size(); ++i) {
+      converted.mu[i] = belief.mu[i];
+    }
+    for (size_t i = 0u; i < converted.covariance.size(); ++i) {
+      converted.covariance[i] = belief.covariance[i];
+    }
+    converted_beliefs.push_back(converted);
+  }
+
+  if (!converted_beliefs.empty()) {
+    incoming_beliefs_callback_(converted_beliefs);
   }
 }
 

@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -24,6 +25,7 @@
 
 #include <opencv2/opencv.hpp>
 
+#include <liorf/pose_belief_array.h>
 #include "kimera_vio_ros/RosPublishers.h"
 
 namespace VIO {
@@ -57,6 +59,13 @@ class RosVisualizer : public Visualizer3D {
   VisualizerOutput::UniquePtr spinOnce(
       const VisualizerInput& viz_input) override;
 
+  using IncomingBeliefsCallback =
+      std::function<void(const std::vector<ExternalPoseBelief>& beliefs)>;
+
+  void registerIncomingBeliefsCallback(const IncomingBeliefsCallback& callback) {
+    incoming_beliefs_callback_ = callback;
+  }
+
  protected:
   // Publish VIO outputs.
   virtual void publishBackendOutput(const BackendOutput::ConstPtr& output);
@@ -65,6 +74,13 @@ class RosVisualizer : public Visualizer3D {
       const FrontendOutputPacketBase::ConstPtr& output) const;
 
   virtual void publishMesherOutput(const MesherOutput::ConstPtr& output) const;
+
+ private:
+  void publishPoseBelief(const BackendOutput::ConstPtr& output);
+
+  void poseBeliefInCallback(const liorf::pose_belief_arrayConstPtr& msg);
+
+  static uint8_t resolveAgentId(const std::string& agent_id);
 
  private:
   void publishTimeHorizonPointCloud(
@@ -103,6 +119,9 @@ class RosVisualizer : public Visualizer3D {
   ros::Publisher resiliency_pub_;
   ros::Publisher frontend_stats_pub_;
   ros::Publisher imu_bias_pub_;
+  ros::Publisher pose_belief_out_pub_;
+
+  ros::Subscriber pose_belief_in_sub_;
 
   //! Define tf broadcaster for world to base_link (IMU) and to map (PGO).
   tf::TransformBroadcaster tf_broadcaster_;
@@ -112,11 +131,17 @@ class RosVisualizer : public Visualizer3D {
   std::string odom_frame_id_;
   std::string base_link_frame_id_;
   std::string map_frame_id_;
+  std::string cbs_belief_in_topic_;
+  std::string cbs_belief_out_topic_;
 
   cv::Size image_size_;
 
   //! Define image publishers manager
   std::unique_ptr<ImagePublishers> image_publishers_;
+
+  bool cbs_belief_bridge_enable_ = true;
+  uint8_t cbs_agent_id_ = static_cast<uint8_t>('k');
+  IncomingBeliefsCallback incoming_beliefs_callback_;
 
   // Typedefs
   typedef pcl::PointCloud<pcl::PointXYZRGB> PointCloudXYZRGB;

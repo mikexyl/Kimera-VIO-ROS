@@ -40,6 +40,10 @@ file and include this one to launch KimeraVIO on the dataset of your choice -->
   <arg name="lcd_no_detection" default="false"/>
 
   <arg name="use_external_odom" default="false"/>
+  <arg name="cbs_belief_bridge_enable" default="true"/>
+  <arg name="cbs_belief_in_topic" default="/kimera/cbs/belief_in"/>
+  <arg name="cbs_belief_out_topic" default="/kimera/cbs/belief_out"/>
+  <arg name="cbs_belief_forward_queue_limit" default="800"/>
   <!-- If true, KimeraVIO will compute a static offset between the
        latest IMU and camera measurement -->
   <arg name="do_coarse_temporal_sync" default="false"/>
@@ -161,6 +165,10 @@ file and include this one to launch KimeraVIO on the dataset of your choice -->
     <param name="bow_batch_size"        value="$(arg bow_batch_size)" />
     <param name="bow_skip_num"          value="$(arg bow_skip_num)" />
     <param name="publish_vlc_frames"    value="$(arg publish_vlc_frames)" />
+    <param name="cbs_belief_bridge_enable" value="$(arg cbs_belief_bridge_enable)"/>
+    <param name="cbs_belief_in_topic" value="$(arg cbs_belief_in_topic)"/>
+    <param name="cbs_belief_out_topic" value="$(arg cbs_belief_out_topic)"/>
+    <param name="cbs_belief_forward_queue_limit" value="$(arg cbs_belief_forward_queue_limit)"/>
 
     <!-- Frame IDs for Odometry -->
     <param name="odom_frame_id"      value="$(arg odom_frame_id)"/>

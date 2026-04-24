@@ -6,9 +6,12 @@
 #include <ros/ros.h>
 #include <std_srvs/Trigger.h>
 
+#include <deque>
 #include <kimera-vio/pipeline/Pipeline-definitions.h>
 #include <kimera-vio/pipeline/Pipeline.h>
 #include <kimera-vio/utils/Macros.h>
+#include <mutex>
+#include <vector>
 
 #include "kimera_vio_ros/RosDataProviderInterface.h"
 #include "kimera_vio_ros/RosDisplay.h"
@@ -36,6 +39,11 @@ class KimeraVioRos {
       const VioParams& vio_params);
 
   void connectVIO();
+
+  void bufferExternalBeliefs(
+      const std::vector<ExternalPoseBelief>& beliefs);
+
+  void flushExternalBeliefsToPipeline();
 
   /**
    * @brief restartKimeraVio Callback for the rosservice to restart the pipeline
@@ -70,6 +78,10 @@ class KimeraVioRos {
   //! ROS Services
   ros::ServiceServer restart_vio_pipeline_srv_;
   std::atomic_bool restart_vio_pipeline_;
+
+  std::mutex external_beliefs_mutex_;
+  std::deque<ExternalPoseBelief> pending_external_beliefs_;
+  size_t external_beliefs_queue_limit_ = 800u;
 };
 
 }  // namespace VIO
