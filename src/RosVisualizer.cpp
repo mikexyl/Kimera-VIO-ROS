@@ -25,10 +25,13 @@
 #include <ros/ros.h>
 #include <std_msgs/Float64MultiArray.h>
 #include <tf/transform_broadcaster.h>
-#include <tf2/buffer_core.h>
+#include <tf/transform_listener.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
+#include <limits>
+#include <sstream>
 #include <string>
 
 #include "kimera_vio_ros/utils/UtilsRos.h"
@@ -51,6 +54,149 @@ gtsam::Matrix6 sanitizePoseCovariance(const gtsam::Matrix& state_covariance) {
     }
   }
   return pose_cov;
+}
+
+std::string sanitizeCsvToken(std::string token) {
+  std::replace(token.begin(), token.end(), ',', '_');
+  std::replace(token.begin(), token.end(), ' ', '_');
+  return token.empty() ? "na" : token;
+}
+
+std::string vector6ToToken(const gtsam::Vector6& vector) {
+  std::ostringstream oss;
+  oss << "v[";
+  for (size_t i = 0u; i < 6u; ++i) {
+    if (i > 0u) {
+      oss << ";";
+    }
+    oss << vector(i);
+  }
+  oss << "]";
+  return oss.str();
+}
+
+std::string matrix6ToToken(const gtsam::Matrix6& matrix) {
+  std::ostringstream oss;
+  oss << "m[";
+  for (size_t r = 0u; r < 6u; ++r) {
+    if (r > 0u) {
+      oss << "|";
+    }
+    for (size_t c = 0u; c < 6u; ++c) {
+      if (c > 0u) {
+        oss << ";";
+      }
+      oss << matrix(r, c);
+    }
+  }
+  oss << "]";
+  return oss.str();
+}
+
+double minEigenvalueSymmetric(const gtsam::Matrix6& matrix) {
+  Eigen::SelfAdjointEigenSolver<gtsam::Matrix6> eig(0.5 * (matrix + matrix.transpose()));
+  if (eig.info() != Eigen::Success) {
+    return std::numeric_limits<double>::quiet_NaN();
+  }
+  return eig.eigenvalues().minCoeff();
+}
+
+double poseErrorNorm(const gtsam::Pose3& lhs, const gtsam::Pose3& rhs) {
+  try {
+    return gtsam::Pose3::Logmap(lhs.inverse() * rhs).norm();
+  } catch (...) {
+    return std::numeric_limits<double>::quiet_NaN();
+  }
+}
+
+std::string keyTokenForAgent(uint8_t source_agent, uint32_t pose_index) {
+  std::ostringstream oss;
+  oss << "p:";
+  if (std::isprint(static_cast<unsigned char>(source_agent))) {
+    oss << static_cast<char>(source_agent);
+  } else {
+    oss << static_cast<int>(source_agent);
+  }
+  oss << ":" << pose_index;
+  return oss.str();
+}
+
+struct OutgoingCovProvenance {
+  std::string source_path;
+  std::string is_local_only;
+  std::string is_anchor_regularized;
+  std::string is_fused_fallback;
+};
+
+OutgoingCovProvenance resolveKimeraOutgoingCovProvenance(
+    const std::string& raw_source_tag) {
+  const std::string source_tag = sanitizeCsvToken(raw_source_tag);
+  if (source_tag == "local_bpsam") {
+    return {"Kimera::local_bpsam_pose_covariance",
+            "true",
+            "true",
+            "false"};
+  }
+  if (source_tag == "local_smoother") {
+    return {"Kimera::local_smoother_pose_covariance",
+            "true",
+            "true",
+            "false"};
+  }
+  if (source_tag == "filtered_fallback") {
+    return {"Kimera::filtered_local_only_main_graph_covariance_fallback",
+            "true",
+            "true",
+            "true"};
+  }
+  if (source_tag == "unavailable") {
+    return {"Kimera::unavailable_pose_covariance",
+            "false",
+            "false",
+            "false"};
+  }
+  return {"Kimera::unknown_pose_covariance_source_" + source_tag,
+          "false",
+          "false",
+          "false"};
+}
+
+template <typename Array6>
+gtsam::Vector6 toVector6(const Array6& values) {
+  gtsam::Vector6 vector = gtsam::Vector6::Zero();
+  for (size_t i = 0u; i < 6u; ++i) {
+    vector(i) = values[i];
+  }
+  return vector;
+}
+
+template <typename Array36>
+gtsam::Matrix6 toMatrix6(const Array36& values) {
+  gtsam::Matrix6 matrix = gtsam::Matrix6::Zero();
+  for (size_t r = 0u; r < 6u; ++r) {
+    for (size_t c = 0u; c < 6u; ++c) {
+      matrix(r, c) = values[r * 6u + c];
+    }
+  }
+  return matrix;
+}
+
+template <typename Array6>
+void fromVector6(const gtsam::Vector6& vector, Array6* values) {
+  CHECK_NOTNULL(values);
+  for (size_t i = 0u; i < 6u; ++i) {
+    (*values)[i] = vector(i);
+  }
+}
+
+template <typename Array36>
+void fromMatrix6(const gtsam::Matrix6& matrix, Array36* values) {
+  CHECK_NOTNULL(values);
+  for (size_t r = 0u; r < 6u; ++r) {
+    for (size_t c = 0u; c < 6u; ++c) {
+      (*values)[r * 6u + c] = matrix(r, c);
+    }
+  }
 }
 }  // namespace
 
@@ -82,6 +228,12 @@ RosVisualizer::RosVisualizer(const VioParams& vio_params)
       "cbs_belief_in_topic", cbs_belief_in_topic_, "kimera/cbs/belief_in");
   nh_private_.param<std::string>(
       "cbs_belief_out_topic", cbs_belief_out_topic_, "kimera/cbs/belief_out");
+  nh_private_.param<std::string>("cbs_external_pose_frame_id",
+                                 cbs_external_pose_frame_id_,
+                                 base_link_frame_id_);
+  if (cbs_external_pose_frame_id_.empty()) {
+    cbs_external_pose_frame_id_ = base_link_frame_id_;
+  }
 
   // Publishers
   odometry_pub_ = nh_.advertise<nav_msgs::Odometry>("odometry", 1, true);
@@ -104,7 +256,8 @@ RosVisualizer::RosVisualizer(const VioParams& vio_params)
     ROS_INFO_STREAM("Kimera belief bridge enabled. agent='"
                     << static_cast<char>(cbs_agent_id_) << "', in='"
                     << cbs_belief_in_topic_ << "', out='"
-                    << cbs_belief_out_topic_ << "'.");
+                    << cbs_belief_out_topic_ << "', external_pose_frame='"
+                    << cbs_external_pose_frame_id_ << "'.");
   } else {
     ROS_INFO("Kimera belief bridge disabled.");
   }
@@ -113,6 +266,45 @@ RosVisualizer::RosVisualizer(const VioParams& vio_params)
 uint8_t RosVisualizer::resolveAgentId(const std::string& agent_id) {
   return agent_id.empty() ? static_cast<uint8_t>('k')
                           : static_cast<uint8_t>(agent_id.front());
+}
+
+bool RosVisualizer::lookupExternalPoseFrameTransform(
+    gtsam::Pose3* base_T_external, gtsam::Pose3* external_T_base) {
+  CHECK_NOTNULL(base_T_external);
+  CHECK_NOTNULL(external_T_base);
+  if (cbs_external_pose_frame_id_ == base_link_frame_id_) {
+    *base_T_external = gtsam::Pose3();
+    *external_T_base = gtsam::Pose3();
+    return true;
+  }
+
+  tf::StampedTransform base_to_external_tf;
+  try {
+    tf_listener_.lookupTransform(base_link_frame_id_,
+                                 cbs_external_pose_frame_id_,
+                                 ros::Time(0),
+                                 base_to_external_tf);
+  } catch (const tf::TransformException& ex) {
+    ROS_WARN_STREAM_THROTTLE(
+        2.0,
+        "CBS belief frame transform unavailable for "
+            << base_link_frame_id_ << " -> " << cbs_external_pose_frame_id_
+            << ": " << ex.what());
+    return false;
+  }
+
+  geometry_msgs::Transform tf_msg;
+  tf_msg.translation.x = base_to_external_tf.getOrigin().x();
+  tf_msg.translation.y = base_to_external_tf.getOrigin().y();
+  tf_msg.translation.z = base_to_external_tf.getOrigin().z();
+  tf_msg.rotation.x = base_to_external_tf.getRotation().x();
+  tf_msg.rotation.y = base_to_external_tf.getRotation().y();
+  tf_msg.rotation.z = base_to_external_tf.getRotation().z();
+  tf_msg.rotation.w = base_to_external_tf.getRotation().w();
+
+  utils::rosTfToGtsamPose(tf_msg, base_T_external);
+  *external_T_base = base_T_external->inverse();
+  return true;
 }
 
 VisualizerOutput::UniquePtr RosVisualizer::spinOnce(
@@ -170,11 +362,6 @@ void RosVisualizer::publishPoseBelief(const BackendOutput::ConstPtr& output) {
   belief.stamp_sec = msg.header.stamp.toSec();
   belief.relax_factor = 0.0;
 
-  const gtsam::Vector6 pose_mu = gtsam::Pose3::Logmap(output->W_State_Blkf_.pose_);
-  for (size_t i = 0u; i < belief.mu.size(); ++i) {
-    belief.mu[i] = pose_mu(i);
-  }
-
   if (!output->pose_belief_local_covariance_valid_) {
     LOG_EVERY_N(WARNING, 100)
         << "Skipping CBS belief publish because local-only covariance is not "
@@ -183,16 +370,50 @@ void RosVisualizer::publishPoseBelief(const BackendOutput::ConstPtr& output) {
     return;
   }
 
-  const gtsam::Matrix6 pose_cov =
+  gtsam::Pose3 pose_to_publish = output->W_State_Blkf_.pose_;
+  gtsam::Matrix6 covariance_to_publish =
       sanitizePoseCovariance(output->pose_belief_local_covariance_lkf_);
-  for (size_t r = 0u; r < 6u; ++r) {
-    for (size_t c = 0u; c < 6u; ++c) {
-      belief.covariance[r * 6u + c] = pose_cov(r, c);
+  const OutgoingCovProvenance provenance =
+      resolveKimeraOutgoingCovProvenance(
+          output->pose_belief_covariance_source_);
+  const bool publishes_external_pose_frame =
+      (cbs_external_pose_frame_id_ != base_link_frame_id_);
+  const std::string frame_semantic = publishes_external_pose_frame
+                                         ? "world_to_external_pose"
+                                         : "world_to_body_pose";
+  const std::string cov_semantic = publishes_external_pose_frame
+                                       ? "tangent_at_external_frame_pose"
+                                       : "tangent_at_body_frame_pose";
+
+  if (cbs_external_pose_frame_id_ != base_link_frame_id_) {
+    gtsam::Pose3 base_T_external;
+    gtsam::Pose3 external_T_base;
+    if (!lookupExternalPoseFrameTransform(&base_T_external, &external_T_base)) {
+      return;
     }
+
+    // Convert from Kimera body-frame pose belief (T_odom_base) to external
+    // CBS frame expected by the peer (T_odom_external).
+    pose_to_publish = pose_to_publish * base_T_external;
+    const gtsam::Matrix6 adjoint_external_base = external_T_base.AdjointMap();
+    covariance_to_publish = sanitizePoseCovariance(adjoint_external_base *
+                                                   covariance_to_publish *
+                                                   adjoint_external_base.transpose());
   }
+
+  const gtsam::Vector6 pose_mu = gtsam::Pose3::Logmap(pose_to_publish);
+  fromVector6(pose_mu, &belief.mu);
+  fromMatrix6(covariance_to_publish, &belief.covariance);
 
   msg.beliefs.push_back(belief);
   pose_belief_out_pub_.publish(msg);
+  LOG(INFO) << "CBS_KIMERA_OUTGOING_PROVENANCE_ROW,"
+            << keyTokenForAgent(belief.source_agent, belief.pose_index) << ","
+            << belief.header.stamp.toNSec() << ","
+            << provenance.source_path << "," << provenance.is_local_only << ","
+            << provenance.is_anchor_regularized << ","
+            << provenance.is_fused_fallback << "," << frame_semantic << ","
+            << cov_semantic;
 }
 
 void RosVisualizer::poseBeliefInCallback(
@@ -203,6 +424,14 @@ void RosVisualizer::poseBeliefInCallback(
 
   std::vector<ExternalPoseBelief> converted_beliefs;
   converted_beliefs.reserve(msg->beliefs.size());
+
+  gtsam::Pose3 base_T_external;
+  gtsam::Pose3 external_T_base;
+  if (cbs_external_pose_frame_id_ != base_link_frame_id_ &&
+      !lookupExternalPoseFrameTransform(&base_T_external, &external_T_base)) {
+    return;
+  }
+
   for (const auto& belief : msg->beliefs) {
     if (belief.source_agent == cbs_agent_id_) {
       continue;
@@ -211,15 +440,91 @@ void RosVisualizer::poseBeliefInCallback(
     ExternalPoseBelief converted;
     converted.source_agent = belief.source_agent;
     converted.pose_index = belief.pose_index;
+    converted.sender_pose_index = belief.pose_index;
     converted.stamp_sec =
         belief.stamp_sec > 0.0 ? belief.stamp_sec : belief.header.stamp.toSec();
+    converted.sender_timestamp_ns = belief.header.stamp.toNSec();
+    converted.sender_frame_id = belief.header.frame_id;
     converted.relax_factor = belief.relax_factor;
-    for (size_t i = 0u; i < converted.mu.size(); ++i) {
-      converted.mu[i] = belief.mu[i];
+
+    const gtsam::Pose3 sender_pose_raw = gtsam::Pose3::Expmap(toVector6(belief.mu));
+    const gtsam::Matrix6 sender_covariance = sanitizePoseCovariance(toMatrix6(belief.covariance));
+    gtsam::Pose3 transformed_pose = sender_pose_raw;
+    converted.sent_trace = sender_covariance.trace();
+    gtsam::Matrix6 transformed_covariance = sender_covariance;
+    std::string transform_label = "identity_external_equals_base";
+    const std::string receiver_expected_frame =
+        cbs_external_pose_frame_id_.empty() ? base_link_frame_id_
+                                            : cbs_external_pose_frame_id_;
+
+    if (cbs_external_pose_frame_id_ != base_link_frame_id_) {
+      // Convert peer belief from external CBS frame (T_odom_external) into
+      // Kimera body-frame pose convention (T_odom_base).
+      transformed_pose = transformed_pose * external_T_base;
+      const gtsam::Matrix6 adjoint_base_external = base_T_external.AdjointMap();
+      transformed_covariance =
+          sanitizePoseCovariance(adjoint_base_external * transformed_covariance *
+                                 adjoint_base_external.transpose());
+      transform_label = "external_to_base_compose_adjoint";
     }
-    for (size_t i = 0u; i < converted.covariance.size(); ++i) {
-      converted.covariance[i] = belief.covariance[i];
+
+    gtsam::Pose3 reconstructed_pose = sender_pose_raw;
+    gtsam::Matrix6 reconstructed_covariance = sender_covariance;
+    if (cbs_external_pose_frame_id_ != base_link_frame_id_) {
+      reconstructed_pose = sender_pose_raw * external_T_base;
+      const gtsam::Matrix6 adjoint_base_external = base_T_external.AdjointMap();
+      reconstructed_covariance =
+          sanitizePoseCovariance(adjoint_base_external * sender_covariance *
+                                 adjoint_base_external.transpose());
     }
+    const double mean_error_norm = poseErrorNorm(transformed_pose, reconstructed_pose);
+    const double cov_error_fro =
+        (transformed_covariance - reconstructed_covariance).norm();
+    const double cov_symmetry_error =
+        (transformed_covariance - transformed_covariance.transpose()).norm();
+    const double min_eigenvalue = minEigenvalueSymmetric(transformed_covariance);
+
+    gtsam::Pose3 roundtrip_pose = transformed_pose;
+    gtsam::Matrix6 roundtrip_covariance = transformed_covariance;
+    if (cbs_external_pose_frame_id_ != base_link_frame_id_) {
+      roundtrip_pose = transformed_pose * base_T_external;
+      const gtsam::Matrix6 adjoint_external_base = external_T_base.AdjointMap();
+      roundtrip_covariance =
+          sanitizePoseCovariance(adjoint_external_base * transformed_covariance *
+                                 adjoint_external_base.transpose());
+    }
+    const double mean_roundtrip_error = poseErrorNorm(roundtrip_pose, sender_pose_raw);
+    const double cov_roundtrip_error =
+        (roundtrip_covariance - sender_covariance).norm();
+
+    const std::string key_token =
+        std::string("p:") + static_cast<char>(belief.source_agent) + ":" +
+        std::to_string(belief.pose_index);
+    LOG(INFO) << "CBS_TRANSPORT_ROW_L2K,"
+              << key_token << ","
+              << converted.sender_timestamp_ns << ","
+              << sanitizeCsvToken(belief.header.frame_id) << ","
+              << sanitizeCsvToken(receiver_expected_frame) << ","
+              << sanitizeCsvToken(transform_label) << ","
+              << vector6ToToken(gtsam::Pose3::Logmap(sender_pose_raw)) << ","
+              << vector6ToToken(gtsam::Pose3::Logmap(transformed_pose)) << ","
+              << vector6ToToken(gtsam::Pose3::Logmap(reconstructed_pose)) << ","
+              << mean_error_norm << ","
+              << matrix6ToToken(sender_covariance) << ","
+              << matrix6ToToken(transformed_covariance) << ","
+              << matrix6ToToken(reconstructed_covariance) << ","
+              << cov_error_fro << ","
+              << cov_symmetry_error << ","
+              << min_eigenvalue << ",ok";
+    LOG(INFO) << "CBS_ROUNDTRIP_ROW_L2K,"
+              << key_token << ","
+              << converted.sender_timestamp_ns << ","
+              << mean_roundtrip_error << ","
+              << cov_roundtrip_error << ",ok";
+
+    converted.received_trace = transformed_covariance.trace();
+    fromVector6(gtsam::Pose3::Logmap(transformed_pose), &converted.mu);
+    fromMatrix6(transformed_covariance, &converted.covariance);
     converted_beliefs.push_back(converted);
   }
 

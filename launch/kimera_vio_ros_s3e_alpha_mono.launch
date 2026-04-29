@@ -1,5 +1,6 @@
 <launch>
   <arg name="dataset_name" value="S3EAlphaMonoXfeat"/>
+  <arg name="params_folder" default="$(find kimera_vio)/params/S3EAlphaMonoXfeat"/>
   <arg name="multirobot" default="true"/>
   <arg name="verbosity" default="0"/>
   <arg name="do_coarse_temporal_sync" default="false"/>
@@ -32,12 +33,21 @@
   <arg name="use_lcd" default="false"/>
   <arg name="visualize" default="true"/>
   <arg name="use_rviz" default="true"/>
+  <arg name="include_pipeline_flags" default="false"/>
+  <arg name="pipeline_flagfile"
+       default="$(find kimera_vio)/params/S3EAlphaMonoXfeat/flags/Pipeline.flags"/>
 
   <arg name="cbs_belief_bridge_enable" default="true"/>
   <arg name="cbs_belief_in_topic" default="/kimera/cbs/belief_in"/>
   <arg name="cbs_belief_out_topic" default="/kimera/cbs/belief_out"/>
   <arg name="cbs_belief_forward_queue_limit" default="800"/>
+  <arg name="cbs_external_belief_timestamp_tolerance_sec" default="0.2"/>
+  <arg name="cbs_external_pose_frame_id" default="imu_link"/>
   <arg name="cbs_use_bpsam_for_local_belief_covariance" default="false"/>
+  <arg name="cbs_use_persistent_bpsam_sidecar_for_belief_covariance"
+       default="false"/>
+  <arg name="cbs_use_persistent_bpsam_for_main_backend" default="false"/>
+  <arg name="cbs_log_covariance_sanity_diff" default="false"/>
 
   <node if="$(arg decode_left_compressed)"
         pkg="kimera_vio_ros"

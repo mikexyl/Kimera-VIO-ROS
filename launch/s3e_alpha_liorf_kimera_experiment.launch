@@ -7,22 +7,67 @@
 
   <arg name="use_kimera_rviz" default="true"/>
   <arg name="use_liorf_rviz" default="false"/>
+  <arg name="kimera_params_folder"
+       default="$(find kimera_vio)/params/S3EAlphaMonoXfeat"/>
   <arg name="enable_cbs_bridge" default="true"/>
+  <arg name="liorf_belief_timestamp_tolerance_sec" default="0.12"/>
+  <arg name="kimera_belief_timestamp_tolerance_sec" default="0.2"/>
+  <arg name="liorf_belief_reject_first_message" default="true"/>
+  <arg name="liorf_belief_exchange_window_size" default="30"/>
+  <arg name="liorf_cbs_l2k_cov_audit_enable" default="false"/>
+  <arg name="liorf_cbs_l2k_cov_audit_max_samples" default="20"/>
+  <arg name="liorf_cbs_l2k_cov_audit_replacement_trans_variance" default="1.0"/>
+  <arg name="liorf_cbs_l2k_cov_audit_query_anchor_variance" default="1000000.0"/>
+  <arg name="liorf_cbs_l2k_outgoing_covariance_mode" default="A_as_is_local_anchored"/>
   <arg name="cbs_use_bpsam_for_local_belief_covariance" default="false"/>
+  <arg name="cbs_use_persistent_bpsam_sidecar_for_belief_covariance"
+       default="false"/>
+  <arg name="cbs_use_persistent_bpsam_for_main_backend" default="false"/>
+  <arg name="cbs_log_covariance_sanity_diff" default="false"/>
+  <arg name="include_pipeline_flags" default="false"/>
+  <arg name="pipeline_flagfile"
+       default="$(find kimera_vio)/params/S3EAlphaMonoXfeat/flags/Pipeline.flags"/>
 
   <include file="$(find liorf)/launch/run_lio_sam_s3e_alpha.launch">
     <arg name="use_rviz" value="$(arg use_liorf_rviz)"/>
+    <arg name="cbs_belief_timestamp_tolerance_sec"
+         value="$(arg liorf_belief_timestamp_tolerance_sec)"/>
+    <arg name="cbs_belief_reject_first_message"
+         value="$(arg liorf_belief_reject_first_message)"/>
+    <arg name="cbs_belief_exchange_window_size"
+         value="$(arg liorf_belief_exchange_window_size)"/>
+    <arg name="cbs_l2k_cov_audit_enable"
+         value="$(arg liorf_cbs_l2k_cov_audit_enable)"/>
+    <arg name="cbs_l2k_cov_audit_max_samples"
+         value="$(arg liorf_cbs_l2k_cov_audit_max_samples)"/>
+    <arg name="cbs_l2k_cov_audit_replacement_trans_variance"
+         value="$(arg liorf_cbs_l2k_cov_audit_replacement_trans_variance)"/>
+    <arg name="cbs_l2k_cov_audit_query_anchor_variance"
+         value="$(arg liorf_cbs_l2k_cov_audit_query_anchor_variance)"/>
+    <arg name="cbs_l2k_outgoing_covariance_mode"
+         value="$(arg liorf_cbs_l2k_outgoing_covariance_mode)"/>
   </include>
 
   <include file="$(find kimera_vio_ros)/launch/kimera_vio_ros_s3e_alpha_mono.launch">
     <arg name="online" value="true"/>
     <arg name="should_use_sim_time" value="true"/>
+    <arg name="params_folder" value="$(arg kimera_params_folder)"/>
     <arg name="use_rviz" value="$(arg use_kimera_rviz)"/>
     <arg name="cbs_belief_bridge_enable" value="$(arg enable_cbs_bridge)"/>
     <arg name="cbs_belief_in_topic" value="/kimera/cbs/belief_in"/>
     <arg name="cbs_belief_out_topic" value="/kimera/cbs/belief_out"/>
+    <arg name="cbs_external_belief_timestamp_tolerance_sec"
+         value="$(arg kimera_belief_timestamp_tolerance_sec)"/>
     <arg name="cbs_use_bpsam_for_local_belief_covariance"
          value="$(arg cbs_use_bpsam_for_local_belief_covariance)"/>
+    <arg name="cbs_use_persistent_bpsam_sidecar_for_belief_covariance"
+         value="$(arg cbs_use_persistent_bpsam_sidecar_for_belief_covariance)"/>
+    <arg name="cbs_use_persistent_bpsam_for_main_backend"
+         value="$(arg cbs_use_persistent_bpsam_for_main_backend)"/>
+    <arg name="cbs_log_covariance_sanity_diff"
+         value="$(arg cbs_log_covariance_sanity_diff)"/>
+    <arg name="include_pipeline_flags" value="$(arg include_pipeline_flags)"/>
+    <arg name="pipeline_flagfile" value="$(arg pipeline_flagfile)"/>
   </include>
 
   <node if="$(arg play_bag)"

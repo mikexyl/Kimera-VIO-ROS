@@ -44,7 +44,13 @@ file and include this one to launch KimeraVIO on the dataset of your choice -->
   <arg name="cbs_belief_in_topic" default="/kimera/cbs/belief_in"/>
   <arg name="cbs_belief_out_topic" default="/kimera/cbs/belief_out"/>
   <arg name="cbs_belief_forward_queue_limit" default="800"/>
+  <arg name="cbs_external_belief_timestamp_tolerance_sec" default="0.2"/>
+  <arg name="cbs_external_pose_frame_id" default=""/>
   <arg name="cbs_use_bpsam_for_local_belief_covariance" default="false"/>
+  <arg name="cbs_use_persistent_bpsam_sidecar_for_belief_covariance"
+       default="false"/>
+  <arg name="cbs_use_persistent_bpsam_for_main_backend" default="false"/>
+  <arg name="cbs_log_covariance_sanity_diff" default="false"/>
   <!-- If true, KimeraVIO will compute a static offset between the
        latest IMU and camera measurement -->
   <arg name="do_coarse_temporal_sync" default="false"/>
@@ -113,7 +119,8 @@ file and include this one to launch KimeraVIO on the dataset of your choice -->
 
   <arg name="flags_folder" default="$(arg params_folder)/flags"/>
   <arg name="include_pipeline_flags" default="false"/>
-  <arg name="pipeline_flag_args" value="--flagfile=$(arg flags_folder)/Pipeline.flags"
+  <arg name="pipeline_flagfile" default="$(arg flags_folder)/Pipeline.flags"/>
+  <arg name="pipeline_flag_args" value="--flagfile=$(arg pipeline_flagfile)"
        if="$(arg include_pipeline_flags)"/>
   <arg name="pipeline_flag_args" value=""
        unless="$(arg include_pipeline_flags)"/>
@@ -153,7 +160,11 @@ file and include this one to launch KimeraVIO on the dataset of your choice -->
               --no_incremental_pose=$(arg no_incremental_pose)
               --viz_type=$(arg viz_type)
               --visualize=$(arg visualize)
-              --cbs_use_bpsam_for_local_belief_covariance=$(arg cbs_use_bpsam_for_local_belief_covariance)">
+              --cbs_use_bpsam_for_local_belief_covariance=$(arg cbs_use_bpsam_for_local_belief_covariance)
+              --cbs_use_persistent_bpsam_sidecar_for_belief_covariance=$(arg cbs_use_persistent_bpsam_sidecar_for_belief_covariance)
+              --cbs_use_persistent_bpsam_for_main_backend=$(arg cbs_use_persistent_bpsam_for_main_backend)
+              --cbs_log_covariance_sanity_diff=$(arg cbs_log_covariance_sanity_diff)
+              --cbs_external_belief_timestamp_tolerance_sec=$(arg cbs_external_belief_timestamp_tolerance_sec)">
     <param name="image_transport" value="$(arg rgb_image_transport)"/>
     <param name="params_folder_path"    value="$(arg params_folder)"/>
     <param name="sensor_params_folder_path" value="$(arg sensor_folder)"/>
@@ -171,6 +182,7 @@ file and include this one to launch KimeraVIO on the dataset of your choice -->
     <param name="cbs_belief_in_topic" value="$(arg cbs_belief_in_topic)"/>
     <param name="cbs_belief_out_topic" value="$(arg cbs_belief_out_topic)"/>
     <param name="cbs_belief_forward_queue_limit" value="$(arg cbs_belief_forward_queue_limit)"/>
+    <param name="cbs_external_pose_frame_id" value="$(arg cbs_external_pose_frame_id)"/>
 
     <!-- Frame IDs for Odometry -->
     <param name="odom_frame_id"      value="$(arg odom_frame_id)"/>

@@ -22,6 +22,7 @@
 #include <pcl_ros/point_cloud.h>
 #include <ros/ros.h>
 #include <tf/transform_broadcaster.h>
+#include <tf/transform_listener.h>
 
 #include <opencv2/opencv.hpp>
 
@@ -81,6 +82,8 @@ class RosVisualizer : public Visualizer3D {
   void poseBeliefInCallback(const liorf::pose_belief_arrayConstPtr& msg);
 
   static uint8_t resolveAgentId(const std::string& agent_id);
+  bool lookupExternalPoseFrameTransform(gtsam::Pose3* base_T_external,
+                                        gtsam::Pose3* external_T_base);
 
  private:
   void publishTimeHorizonPointCloud(
@@ -125,6 +128,7 @@ class RosVisualizer : public Visualizer3D {
 
   //! Define tf broadcaster for world to base_link (IMU) and to map (PGO).
   tf::TransformBroadcaster tf_broadcaster_;
+  tf::TransformListener tf_listener_;
 
  private:
   //! Define frame ids for odometry message
@@ -133,6 +137,7 @@ class RosVisualizer : public Visualizer3D {
   std::string map_frame_id_;
   std::string cbs_belief_in_topic_;
   std::string cbs_belief_out_topic_;
+  std::string cbs_external_pose_frame_id_;
 
   cv::Size image_size_;
 
