@@ -13,6 +13,8 @@
 #include <Eigen/Core>
 #include <gtsam/geometry/Point3.h>
 #include <gtsam/geometry/Pose3.h>
+#include <gtsam/nonlinear/NonlinearFactorGraph.h>
+#include <gtsam/nonlinear/Values.h>
 
 namespace VIO {
 
@@ -36,6 +38,16 @@ class RosRerunVisualizer {
                       const std::vector<gtsam::Pose3>& poses,
                       const Eigen::Vector4f& rgba,
                       float line_width);
+  void drawFactors(const std::string& entity_path,
+                   const gtsam::NonlinearFactorGraph& factors,
+                   const gtsam::Values& values,
+                   const Eigen::Vector4f& rgba,
+                   float line_width);
+  void drawUncertainty(const std::string& entity_path,
+                       const gtsam::Pose3& pose,
+                       const Eigen::Matrix3d& covariance,
+                       const Eigen::Vector4f& rgba,
+                       float line_width);
 
  private:
   class Impl;

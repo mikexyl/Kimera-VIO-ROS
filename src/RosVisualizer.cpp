@@ -59,6 +59,29 @@ gtsam::Matrix6 sanitizePoseCovariance(const gtsam::Matrix& state_covariance) {
   return pose_cov;
 }
 
+Eigen::Matrix3d sanitizeTranslationCovariance(
+    const gtsam::Matrix& pose_covariance) {
+  Eigen::Matrix3d covariance = Eigen::Matrix3d::Identity() * 1e-3;
+  if (pose_covariance.rows() >= 6 && pose_covariance.cols() >= 6) {
+    covariance = pose_covariance.block<3, 3>(3, 3);
+  }
+
+  covariance = 0.5 * (covariance + covariance.transpose());
+  if (!covariance.allFinite()) {
+    return Eigen::Matrix3d::Identity() * 1e-3;
+  }
+
+  Eigen::SelfAdjointEigenSolver<Eigen::Matrix3d> eig(covariance);
+  if (eig.info() != Eigen::Success) {
+    return Eigen::Matrix3d::Identity() * 1e-3;
+  }
+
+  const Eigen::Vector3d eigenvalues =
+      eig.eigenvalues().array().max(1e-9).matrix();
+  return eig.eigenvectors() * eigenvalues.asDiagonal() *
+         eig.eigenvectors().transpose();
+}
+
 std::string sanitizeCsvToken(std::string token) {
   std::replace(token.begin(), token.end(), ',', '_');
   std::replace(token.begin(), token.end(), ' ', '_');
@@ -296,6 +319,8 @@ RosVisualizer::RosVisualizer(const VioParams& vio_params)
   nh_private_.param("rerun_visualizer_enable", rerun_visualizer_enable, false);
   nh_private_.param<std::string>("rerun_recording_id", rerun_recording_id, "");
   nh_private_.param<std::string>("rerun_host", rerun_host, "auto");
+  nh_private_.param(
+      "rerun_factor_graph_enable", rerun_factor_graph_enable_, true);
   if (rerun_host.empty() || rerun_host == "auto") {
     rerun_host = defaultRerunHost();
   }
@@ -435,6 +460,17 @@ void RosVisualizer::publishRerunBackendOutput(
   rerun_visualizer_->setTimeNSec(output->timestamp_);
   rerun_visualizer_->drawTf(
       "kimera/base_link", output->W_State_Blkf_.pose_, 0.5f);
+  const Eigen::Matrix3d current_pose_covariance =
+      sanitizeTranslationCovariance(output->state_covariance_lkf_);
+  rerun_visualizer_->drawUncertainty(
+      "kimera/current_pose/uncertainty",
+      output->W_State_Blkf_.pose_,
+      current_pose_covariance,
+      Eigen::Vector4f(40.f, 220.f, 80.f, 160.f),
+      1.25f);
+  rerun_visualizer_->drawScalar(
+      "kimera/current_pose/kimera_uncertainty_frobenius_norm",
+      current_pose_covariance.norm());
   rerun_visualizer_->drawScalar("kimera/keyframe_id", output->cur_kf_id_);
 
   const int64_t current_kf_id = static_cast<int64_t>(output->cur_kf_id_);
@@ -458,6 +494,18 @@ void RosVisualizer::publishRerunBackendOutput(
   if (!landmarks.empty()) {
     rerun_visualizer_->drawPoints(
         "kimera/landmarks", landmarks, Eigen::Vector4f(40.f, 220.f, 80.f, 180.f), 2.f);
+  }
+
+  if (rerun_factor_graph_enable_ && output->factor_graph_.size() > 0u &&
+      output->state_.size() > 0u) {
+    rerun_visualizer_->drawFactors(
+        "kimera/factor_graph",
+        output->factor_graph_,
+        output->state_,
+        Eigen::Vector4f(40.f, 220.f, 80.f, 180.f),
+        0.75f);
+    rerun_visualizer_->drawScalar("kimera/factor_graph/factors_total",
+                                  output->factor_graph_.size());
   }
 }
 

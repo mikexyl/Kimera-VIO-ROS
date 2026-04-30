@@ -153,6 +153,7 @@ class RosVisualizer : public Visualizer3D {
   std::unique_ptr<RosRerunVisualizer> rerun_visualizer_;
   std::vector<gtsam::Pose3> rerun_trajectory_;
   int64_t rerun_last_kf_id_ = -1;
+  bool rerun_factor_graph_enable_ = true;
 
   // Typedefs
   typedef pcl::PointCloud<pcl::PointXYZRGB> PointCloudXYZRGB;

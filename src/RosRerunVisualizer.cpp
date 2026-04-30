@@ -53,4 +53,24 @@ void RosRerunVisualizer::drawTrajectory(
   impl_->visualizer_.drawTrajectory(entity_path, poses, rgba, line_width);
 }
 
+void RosRerunVisualizer::drawFactors(
+    const std::string& entity_path,
+    const gtsam::NonlinearFactorGraph& factors,
+    const gtsam::Values& values,
+    const Eigen::Vector4f& rgba,
+    float line_width) {
+  impl_->visualizer_.drawFactors(
+      entity_path, factors, values, rgba, line_width, false, true);
+}
+
+void RosRerunVisualizer::drawUncertainty(
+    const std::string& entity_path,
+    const gtsam::Pose3& pose,
+    const Eigen::Matrix3d& covariance,
+    const Eigen::Vector4f& rgba,
+    float line_width) {
+  impl_->visualizer_.drawUncertainty(
+      entity_path, pose, covariance, rgba, line_width);
+}
+
 }  // namespace VIO
