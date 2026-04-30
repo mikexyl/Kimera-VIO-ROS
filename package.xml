@@ -18,6 +18,7 @@
   <depend>eigen_catkin</depend>
   <depend>kimera_vio</depend>
   <depend>cbs</depend>
+  <depend>aria_viz</depend>
   <depend>liorf</depend>
 
   <depend>roscpp</depend>

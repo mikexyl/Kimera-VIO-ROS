@@ -33,6 +33,9 @@
   <arg name="use_lcd" default="false"/>
   <arg name="visualize" default="true"/>
   <arg name="use_rviz" default="true"/>
+  <arg name="rerun_visualizer_enable" default="true"/>
+  <arg name="rerun_recording_id" default=""/>
+  <arg name="rerun_host" default="rerun+http://172.18.0.1:9876/proxy"/>
   <arg name="include_pipeline_flags" default="false"/>
   <arg name="pipeline_flagfile"
        default="$(find kimera_vio)/params/S3EAlphaMonoXfeat/flags/Pipeline.flags"/>

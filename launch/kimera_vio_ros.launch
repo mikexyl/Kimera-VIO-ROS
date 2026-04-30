@@ -108,6 +108,9 @@ file and include this one to launch KimeraVIO on the dataset of your choice -->
   <arg name="viz_type"     default="0" />
   <!-- Use Rviz for visualization or OpenCV -->
   <arg name="use_rviz"     default="true"/>
+  <arg name="rerun_visualizer_enable" default="false"/>
+  <arg name="rerun_recording_id" default=""/>
+  <arg name="rerun_host" default="rerun+http://172.18.0.1:9876/proxy"/>
 
   <!-- Only here for convenience -->
   <arg name="run_stereo_dense"     default="false"/>
@@ -183,6 +186,9 @@ file and include this one to launch KimeraVIO on the dataset of your choice -->
     <param name="cbs_belief_out_topic" value="$(arg cbs_belief_out_topic)"/>
     <param name="cbs_belief_forward_queue_limit" value="$(arg cbs_belief_forward_queue_limit)"/>
     <param name="cbs_external_pose_frame_id" value="$(arg cbs_external_pose_frame_id)"/>
+    <param name="rerun_visualizer_enable" value="$(arg rerun_visualizer_enable)"/>
+    <param name="rerun_recording_id" value="$(arg rerun_recording_id)"/>
+    <param name="rerun_host" value="$(arg rerun_host)"/>
 
     <!-- Frame IDs for Odometry -->
     <param name="odom_frame_id"      value="$(arg odom_frame_id)"/>

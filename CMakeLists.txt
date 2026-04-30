@@ -6,7 +6,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(catkin_simple REQUIRED)
+find_package(Eigen3 REQUIRED)
 find_package(cbs REQUIRED)
+find_package(aria_viz REQUIRED)
 
 ### System Dependencies
 find_package(Boost REQUIRED COMPONENTS
@@ -28,6 +30,7 @@ cs_add_library(${PROJECT_NAME}
   include/kimera_vio_ros/RosDisplay.h
   include/kimera_vio_ros/RosOnlineDataProvider.h
   include/kimera_vio_ros/RosPublishers.h
+  include/kimera_vio_ros/RosRerunVisualizer.h
   include/kimera_vio_ros/RosVisualizer.h
   include/kimera_vio_ros/utils/UtilsRos.h
   include/kimera_vio_ros/utils/CsvPublisher.h
@@ -36,13 +39,14 @@ cs_add_library(${PROJECT_NAME}
   src/RosBagDataProvider.cpp
   src/RosOnlineDataProvider.cpp
   src/RosDisplay.cpp
+  src/RosRerunVisualizer.cpp
   src/RosVisualizer.cpp
   src/RosLoopClosureVisualizer.cpp
   src/LcdRegistrationServer.cpp
   src/utils/UtilsRos.cpp
   src/utils/CsvPublisher.cpp
 )
-target_link_libraries(${PROJECT_NAME} kimera_vio cbs)
+target_link_libraries(${PROJECT_NAME} kimera_vio cbs aria_viz)
 
 cs_add_executable(${PROJECT_NAME}_node
   src/KimeraVioRosNode.cpp

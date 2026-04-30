@@ -30,6 +30,9 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <cstdlib>
+#include <ctime>
+#include <fstream>
 #include <limits>
 #include <sstream>
 #include <string>
@@ -198,6 +201,58 @@ void fromMatrix6(const gtsam::Matrix6& matrix, Array36* values) {
     }
   }
 }
+
+std::string makeRerunRecordingId(const std::string& prefix) {
+  std::time_t now = std::time(nullptr);
+  std::tm local_time{};
+  localtime_r(&now, &local_time);
+
+  char buffer[32];
+  std::strftime(buffer, sizeof(buffer), "%Y%m%d_%H%M%S", &local_time);
+  return prefix + "_" + buffer;
+}
+
+std::string getDockerGatewayIp() {
+  std::ifstream route_file("/proc/net/route");
+  std::string line;
+  std::getline(route_file, line);
+  while (std::getline(route_file, line)) {
+    std::istringstream iss(line);
+    std::string iface;
+    std::string destination;
+    std::string gateway;
+    unsigned int flags = 0u;
+    if (!(iss >> iface >> destination >> gateway >> std::hex >> flags)) {
+      continue;
+    }
+    if (destination != "00000000" || gateway.size() != 8u) {
+      continue;
+    }
+
+    const unsigned long raw_gateway = std::stoul(gateway, nullptr, 16);
+    std::ostringstream ip;
+    ip << (raw_gateway & 0xfful) << "."
+       << ((raw_gateway >> 8u) & 0xfful) << "."
+       << ((raw_gateway >> 16u) & 0xfful) << "."
+       << ((raw_gateway >> 24u) & 0xfful);
+    return ip.str();
+  }
+  return "";
+}
+
+std::string defaultRerunHost() {
+  const char* env_host = std::getenv("CBSMS_RERUN_HOST");
+  if (env_host != nullptr && std::string(env_host).empty() == false) {
+    return env_host;
+  }
+
+  const std::string gateway_ip = getDockerGatewayIp();
+  if (!gateway_ip.empty()) {
+    return "rerun+http://" + gateway_ip + ":9876/proxy";
+  }
+
+  return "rerun+http://host.docker.internal:9876/proxy";
+}
 }  // namespace
 
 RosVisualizer::RosVisualizer(const VioParams& vio_params)
@@ -233,6 +288,32 @@ RosVisualizer::RosVisualizer(const VioParams& vio_params)
                                  base_link_frame_id_);
   if (cbs_external_pose_frame_id_.empty()) {
     cbs_external_pose_frame_id_ = base_link_frame_id_;
+  }
+
+  bool rerun_visualizer_enable = false;
+  std::string rerun_recording_id;
+  std::string rerun_host;
+  nh_private_.param("rerun_visualizer_enable", rerun_visualizer_enable, false);
+  nh_private_.param<std::string>("rerun_recording_id", rerun_recording_id, "");
+  nh_private_.param<std::string>("rerun_host", rerun_host, "auto");
+  if (rerun_host.empty() || rerun_host == "auto") {
+    rerun_host = defaultRerunHost();
+  }
+  if (rerun_recording_id.empty()) {
+    ros::param::param<std::string>(
+        "/cbsms/rerun_recording_id", rerun_recording_id, "");
+  }
+  if (rerun_recording_id.empty()) {
+    rerun_recording_id = makeRerunRecordingId("kimera_vio_ros");
+  }
+  if (rerun_visualizer_enable) {
+    rerun_visualizer_ =
+        std::make_unique<RosRerunVisualizer>("cbsms",
+                                             rerun_recording_id,
+                                             rerun_host);
+    ROS_INFO_STREAM("Kimera Rerun visualizer enabled. recording_id='"
+                    << rerun_recording_id << "', host='" << rerun_host
+                    << "'.");
   }
 
   // Publishers
@@ -338,8 +419,45 @@ void RosVisualizer::publishBackendOutput(
   if (pointcloud_pub_.getNumSubscribers() > 0) {
     publishTimeHorizonPointCloud(output);
   }
+  publishRerunBackendOutput(output);
   if (cbs_belief_bridge_enable_) {
     publishPoseBelief(output);
+  }
+}
+
+void RosVisualizer::publishRerunBackendOutput(
+    const BackendOutput::ConstPtr& output) {
+  CHECK(output);
+  if (!rerun_visualizer_) {
+    return;
+  }
+
+  rerun_visualizer_->setTimeNSec(output->timestamp_);
+  rerun_visualizer_->drawTf(
+      "kimera/base_link", output->W_State_Blkf_.pose_, 0.5f);
+  rerun_visualizer_->drawScalar("kimera/keyframe_id", output->cur_kf_id_);
+
+  const int64_t current_kf_id = static_cast<int64_t>(output->cur_kf_id_);
+  if (current_kf_id != rerun_last_kf_id_) {
+    rerun_trajectory_.push_back(output->W_State_Blkf_.pose_);
+    rerun_last_kf_id_ = current_kf_id;
+  }
+  if (rerun_trajectory_.size() > 1u) {
+    rerun_visualizer_->drawTrajectory(
+        "kimera/trajectory",
+        rerun_trajectory_,
+        Eigen::Vector4f(40.f, 220.f, 80.f, 255.f),
+        1.5f);
+  }
+
+  std::vector<gtsam::Point3> landmarks;
+  landmarks.reserve(output->landmarks_with_id_map_.size());
+  for (const auto& id_landmark : output->landmarks_with_id_map_) {
+    landmarks.emplace_back(id_landmark.second);
+  }
+  if (!landmarks.empty()) {
+    rerun_visualizer_->drawPoints(
+        "kimera/landmarks", landmarks, Eigen::Vector4f(40.f, 220.f, 80.f, 180.f), 2.f);
   }
 }
 

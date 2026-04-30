@@ -28,6 +28,7 @@
 
 #include <liorf/pose_belief_array.h>
 #include "kimera_vio_ros/RosPublishers.h"
+#include "kimera_vio_ros/RosRerunVisualizer.h"
 
 namespace VIO {
 
@@ -106,6 +107,8 @@ class RosVisualizer : public Visualizer3D {
 
   void publishTf(const BackendOutput::ConstPtr& output);
 
+  void publishRerunBackendOutput(const BackendOutput::ConstPtr& output);
+
   void publishDebugImage(const Timestamp& timestamp,
                          const cv::Mat& debug_image) const;
 
@@ -147,6 +150,9 @@ class RosVisualizer : public Visualizer3D {
   bool cbs_belief_bridge_enable_ = true;
   uint8_t cbs_agent_id_ = static_cast<uint8_t>('k');
   IncomingBeliefsCallback incoming_beliefs_callback_;
+  std::unique_ptr<RosRerunVisualizer> rerun_visualizer_;
+  std::vector<gtsam::Pose3> rerun_trajectory_;
+  int64_t rerun_last_kf_id_ = -1;
 
   // Typedefs
   typedef pcl::PointCloud<pcl::PointXYZRGB> PointCloudXYZRGB;

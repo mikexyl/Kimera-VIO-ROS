@@ -1,9 +1,15 @@
 <launch>
   <arg name="bag_path"
-       default="/workspaces/cbs_fresh_ws/datasets/S3E/S3E_Square_1/S3E_Square_1_alpha_ros1.bag"/>
+       default="/data/s3e/S3E_Square_1.bag"/>
   <arg name="play_bag" default="true"/>
   <arg name="bag_rate" default="1.0"/>
   <arg name="bag_start" default="0.0"/>
+  <arg name="bag_duration" default="60.0"/>
+  <arg name="rerun_visualizer_enable" default="true"/>
+  <arg name="rerun_recording_id" default=""/>
+  <arg name="rerun_host" default="rerun+http://172.18.0.1:9876/proxy"/>
+  <arg name="liorf_rerun_local_map_leaf_size" default="1.0"/>
+  <arg name="liorf_rerun_local_map_max_points" default="10000"/>
 
   <arg name="use_kimera_rviz" default="true"/>
   <arg name="use_liorf_rviz" default="false"/>
@@ -28,8 +34,23 @@
   <arg name="pipeline_flagfile"
        default="$(find kimera_vio)/params/S3EAlphaMonoXfeat/flags/Pipeline.flags"/>
 
+  <param if="$(eval arg('rerun_recording_id') == '')"
+         name="/cbsms/rerun_recording_id"
+         command="$(find kimera_vio_ros)/scripts/rerun_recording_id.py s3e_alpha"/>
+  <param unless="$(eval arg('rerun_recording_id') == '')"
+         name="/cbsms/rerun_recording_id"
+         value="$(arg rerun_recording_id)"/>
+
   <include file="$(find liorf)/launch/run_lio_sam_s3e_alpha.launch">
     <arg name="use_rviz" value="$(arg use_liorf_rviz)"/>
+    <arg name="rerun_visualizer_enable"
+         value="$(arg rerun_visualizer_enable)"/>
+    <arg name="rerun_recording_id" value="$(arg rerun_recording_id)"/>
+    <arg name="rerun_host" value="$(arg rerun_host)"/>
+    <arg name="rerun_local_map_leaf_size"
+         value="$(arg liorf_rerun_local_map_leaf_size)"/>
+    <arg name="rerun_local_map_max_points"
+         value="$(arg liorf_rerun_local_map_max_points)"/>
     <arg name="cbs_belief_timestamp_tolerance_sec"
          value="$(arg liorf_belief_timestamp_tolerance_sec)"/>
     <arg name="cbs_belief_reject_first_message"
@@ -53,6 +74,10 @@
     <arg name="should_use_sim_time" value="true"/>
     <arg name="params_folder" value="$(arg kimera_params_folder)"/>
     <arg name="use_rviz" value="$(arg use_kimera_rviz)"/>
+    <arg name="rerun_visualizer_enable"
+         value="$(arg rerun_visualizer_enable)"/>
+    <arg name="rerun_recording_id" value="$(arg rerun_recording_id)"/>
+    <arg name="rerun_host" value="$(arg rerun_host)"/>
     <arg name="cbs_belief_bridge_enable" value="$(arg enable_cbs_bridge)"/>
     <arg name="cbs_belief_in_topic" value="/kimera/cbs/belief_in"/>
     <arg name="cbs_belief_out_topic" value="/kimera/cbs/belief_out"/>
@@ -75,5 +100,5 @@
         type="play"
         name="s3e_bag_play"
         output="screen"
-        args="--clock --rate=$(arg bag_rate) --start=$(arg bag_start) $(arg bag_path)"/>
+        args="--clock --rate=$(arg bag_rate) --start=$(arg bag_start) --duration=$(arg bag_duration) $(arg bag_path)"/>
 </launch>
