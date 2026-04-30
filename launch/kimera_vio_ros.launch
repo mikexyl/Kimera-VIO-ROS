@@ -51,6 +51,7 @@ file and include this one to launch KimeraVIO on the dataset of your choice -->
        default="false"/>
   <arg name="cbs_use_persistent_bpsam_for_main_backend" default="false"/>
   <arg name="cbs_log_covariance_sanity_diff" default="false"/>
+  <arg name="cbs_enable_soft_reset" default="true"/>
   <!-- If true, KimeraVIO will compute a static offset between the
        latest IMU and camera measurement -->
   <arg name="do_coarse_temporal_sync" default="false"/>
@@ -168,6 +169,7 @@ file and include this one to launch KimeraVIO on the dataset of your choice -->
               --cbs_use_persistent_bpsam_sidecar_for_belief_covariance=$(arg cbs_use_persistent_bpsam_sidecar_for_belief_covariance)
               --cbs_use_persistent_bpsam_for_main_backend=$(arg cbs_use_persistent_bpsam_for_main_backend)
               --cbs_log_covariance_sanity_diff=$(arg cbs_log_covariance_sanity_diff)
+              --cbs_enable_soft_reset=$(arg cbs_enable_soft_reset)
               --cbs_external_belief_timestamp_tolerance_sec=$(arg cbs_external_belief_timestamp_tolerance_sec)">
     <param name="image_transport" value="$(arg rgb_image_transport)"/>
     <param name="params_folder_path"    value="$(arg params_folder)"/>

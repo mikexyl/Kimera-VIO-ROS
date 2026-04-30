@@ -52,6 +52,7 @@
        default="false"/>
   <arg name="cbs_use_persistent_bpsam_for_main_backend" default="false"/>
   <arg name="cbs_log_covariance_sanity_diff" default="false"/>
+  <arg name="cbs_enable_soft_reset" default="true"/>
 
   <node if="$(arg decode_left_compressed)"
         pkg="kimera_vio_ros"
