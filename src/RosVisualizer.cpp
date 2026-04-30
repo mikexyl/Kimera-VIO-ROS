@@ -32,6 +32,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <ctime>
+#include <exception>
 #include <fstream>
 #include <limits>
 #include <sstream>
@@ -444,10 +445,10 @@ void RosVisualizer::publishBackendOutput(
   if (pointcloud_pub_.getNumSubscribers() > 0) {
     publishTimeHorizonPointCloud(output);
   }
-  publishRerunBackendOutput(output);
   if (cbs_belief_bridge_enable_) {
     publishPoseBelief(output);
   }
+  publishRerunBackendOutput(output);
 }
 
 void RosVisualizer::publishRerunBackendOutput(
@@ -472,6 +473,28 @@ void RosVisualizer::publishRerunBackendOutput(
       "kimera/current_pose/kimera_uncertainty_frobenius_norm",
       current_pose_covariance.norm());
   rerun_visualizer_->drawScalar("kimera/keyframe_id", output->cur_kf_id_);
+  rerun_visualizer_->drawScalar(
+      "kimera/timing/optimization_ms",
+      output->optimization_time_sec_ * 1000.0);
+  if (cbs_belief_bridge_enable_) {
+    rerun_visualizer_->drawScalar(
+        "kimera/cbs/beliefs/published_per_update",
+        rerun_cbs_beliefs_published_per_update_.exchange(
+            0u, std::memory_order_relaxed));
+    rerun_visualizer_->drawScalar(
+        "kimera/cbs/beliefs/received_per_update",
+        rerun_cbs_beliefs_received_per_update_.exchange(
+            0u, std::memory_order_relaxed));
+    rerun_visualizer_->drawScalar(
+        "kimera/cbs/beliefs/added_to_factor_graph_per_update",
+        output->external_beliefs_added_per_update_);
+    rerun_visualizer_->drawScalar(
+        "kimera/cbs/timing/belief_generation_ms",
+        output->cbs_belief_generation_time_sec_ * 1000.0);
+    rerun_visualizer_->drawScalar(
+        "kimera/cbs/marginalization_graph/factor_count",
+        output->cbs_marginalization_graph_factor_count_);
+  }
 
   const int64_t current_kf_id = static_cast<int64_t>(output->cur_kf_id_);
   if (current_kf_id != rerun_last_kf_id_) {
@@ -510,38 +533,20 @@ void RosVisualizer::publishRerunBackendOutput(
 }
 
 void RosVisualizer::publishPoseBelief(const BackendOutput::ConstPtr& output) {
+  try {
   CHECK(output);
   if (!cbs_belief_bridge_enable_) {
+    return;
+  }
+  if (output->cbs_outgoing_pose_beliefs_.empty()) {
     return;
   }
 
   liorf::pose_belief_array msg;
   msg.header.stamp.fromNSec(output->timestamp_);
   msg.header.frame_id = odom_frame_id_;
+  msg.beliefs.reserve(output->cbs_outgoing_pose_beliefs_.size());
 
-  liorf::pose_belief belief;
-  belief.header = msg.header;
-  belief.source_agent = cbs_agent_id_;
-  belief.pose_index = output->cur_kf_id_ >= 0
-                          ? static_cast<uint32_t>(output->cur_kf_id_)
-                          : 0u;
-  belief.stamp_sec = msg.header.stamp.toSec();
-  belief.relax_factor = 0.0;
-
-  if (!output->pose_belief_local_covariance_valid_) {
-    LOG_EVERY_N(WARNING, 100)
-        << "Skipping CBS belief publish because local-only covariance is not "
-           "available for keyframe "
-        << output->cur_kf_id_ << ".";
-    return;
-  }
-
-  gtsam::Pose3 pose_to_publish = output->W_State_Blkf_.pose_;
-  gtsam::Matrix6 covariance_to_publish =
-      sanitizePoseCovariance(output->pose_belief_local_covariance_lkf_);
-  const OutgoingCovProvenance provenance =
-      resolveKimeraOutgoingCovProvenance(
-          output->pose_belief_covariance_source_);
   const bool publishes_external_pose_frame =
       (cbs_external_pose_frame_id_ != base_link_frame_id_);
   const std::string frame_semantic = publishes_external_pose_frame
@@ -551,39 +556,68 @@ void RosVisualizer::publishPoseBelief(const BackendOutput::ConstPtr& output) {
                                        ? "tangent_at_external_frame_pose"
                                        : "tangent_at_body_frame_pose";
 
+  gtsam::Pose3 base_T_external;
+  gtsam::Pose3 external_T_base;
   if (cbs_external_pose_frame_id_ != base_link_frame_id_) {
-    gtsam::Pose3 base_T_external;
-    gtsam::Pose3 external_T_base;
     if (!lookupExternalPoseFrameTransform(&base_T_external, &external_T_base)) {
       return;
     }
-
-    // Convert from Kimera body-frame pose belief (T_odom_base) to external
-    // CBS frame expected by the peer (T_odom_external).
-    pose_to_publish = pose_to_publish * base_T_external;
-    const gtsam::Matrix6 adjoint_external_base = external_T_base.AdjointMap();
-    covariance_to_publish = sanitizePoseCovariance(adjoint_external_base *
-                                                   covariance_to_publish *
-                                                   adjoint_external_base.transpose());
   }
 
-  const gtsam::Vector6 pose_mu = gtsam::Pose3::Logmap(pose_to_publish);
-  fromVector6(pose_mu, &belief.mu);
-  fromMatrix6(covariance_to_publish, &belief.covariance);
+  for (const auto& cbs_belief : output->cbs_outgoing_pose_beliefs_) {
+    liorf::pose_belief belief;
+    belief.header = msg.header;
+    belief.source_agent = cbs_belief.source_agent;
+    belief.pose_index = cbs_belief.pose_index;
+    belief.stamp_sec = cbs_belief.stamp_sec > 0.0
+                           ? cbs_belief.stamp_sec
+                           : msg.header.stamp.toSec();
+    belief.relax_factor = cbs_belief.relax_factor;
 
-  msg.beliefs.push_back(belief);
+    gtsam::Pose3 pose_to_publish =
+        gtsam::Pose3::Expmap(toVector6(cbs_belief.mu));
+    gtsam::Matrix6 covariance_to_publish =
+        sanitizePoseCovariance(toMatrix6(cbs_belief.covariance));
+
+    if (publishes_external_pose_frame) {
+      // Convert from Kimera body-frame pose belief (T_odom_base) to external
+      // CBS frame expected by the peer (T_odom_external).
+      pose_to_publish = pose_to_publish * base_T_external;
+      const gtsam::Matrix6 adjoint_external_base =
+          external_T_base.AdjointMap();
+      covariance_to_publish =
+          sanitizePoseCovariance(adjoint_external_base *
+                                 covariance_to_publish *
+                                 adjoint_external_base.transpose());
+    }
+
+    fromVector6(gtsam::Pose3::Logmap(pose_to_publish), &belief.mu);
+    fromMatrix6(covariance_to_publish, &belief.covariance);
+    msg.beliefs.push_back(belief);
+
+    LOG(INFO) << "CBS_KIMERA_OUTGOING_PROVENANCE_ROW,"
+              << keyTokenForAgent(belief.source_agent, belief.pose_index)
+              << "," << belief.header.stamp.toNSec() << ","
+              << "Kimera::bpsam_getBeliefs_local_marginalization,true,true,"
+              << "false," << frame_semantic << "," << cov_semantic;
+  }
+
+  if (msg.beliefs.empty()) {
+    return;
+  }
   pose_belief_out_pub_.publish(msg);
-  LOG(INFO) << "CBS_KIMERA_OUTGOING_PROVENANCE_ROW,"
-            << keyTokenForAgent(belief.source_agent, belief.pose_index) << ","
-            << belief.header.stamp.toNSec() << ","
-            << provenance.source_path << "," << provenance.is_local_only << ","
-            << provenance.is_anchor_regularized << ","
-            << provenance.is_fused_fallback << "," << frame_semantic << ","
-            << cov_semantic;
+  rerun_cbs_beliefs_published_per_update_.fetch_add(msg.beliefs.size(),
+                                                    std::memory_order_relaxed);
+  } catch (const std::exception& e) {
+    LOG(WARNING) << "Kimera CBS pose belief publish skipped: " << e.what();
+  } catch (...) {
+    LOG(WARNING) << "Kimera CBS pose belief publish skipped.";
+  }
 }
 
 void RosVisualizer::poseBeliefInCallback(
     const liorf::pose_belief_arrayConstPtr& msg) {
+  try {
   if (!msg || !incoming_beliefs_callback_) {
     return;
   }
@@ -695,7 +729,14 @@ void RosVisualizer::poseBeliefInCallback(
   }
 
   if (!converted_beliefs.empty()) {
+    rerun_cbs_beliefs_received_per_update_.fetch_add(
+        converted_beliefs.size(), std::memory_order_relaxed);
     incoming_beliefs_callback_(converted_beliefs);
+  }
+  } catch (const std::exception& e) {
+    LOG(WARNING) << "Kimera CBS incoming belief callback skipped: " << e.what();
+  } catch (...) {
+    LOG(WARNING) << "Kimera CBS incoming belief callback skipped.";
   }
 }
 

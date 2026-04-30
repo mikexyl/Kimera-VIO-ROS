@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <functional>
 #include <string>
 #include <vector>
@@ -154,6 +155,8 @@ class RosVisualizer : public Visualizer3D {
   std::vector<gtsam::Pose3> rerun_trajectory_;
   int64_t rerun_last_kf_id_ = -1;
   bool rerun_factor_graph_enable_ = true;
+  std::atomic<size_t> rerun_cbs_beliefs_received_per_update_{0u};
+  std::atomic<size_t> rerun_cbs_beliefs_published_per_update_{0u};
 
   // Typedefs
   typedef pcl::PointCloud<pcl::PointXYZRGB> PointCloudXYZRGB;
