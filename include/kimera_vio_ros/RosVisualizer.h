@@ -7,7 +7,9 @@
 #pragma once
 
 #include <atomic>
+#include <cstdint>
 #include <functional>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -155,8 +157,27 @@ class RosVisualizer : public Visualizer3D {
   std::vector<gtsam::Pose3> rerun_trajectory_;
   int64_t rerun_last_kf_id_ = -1;
   bool rerun_factor_graph_enable_ = true;
+  bool rerun_world_alignment_enable_ = true;
   std::atomic<size_t> rerun_cbs_beliefs_received_per_update_{0u};
   std::atomic<size_t> rerun_cbs_beliefs_published_per_update_{0u};
+
+  struct RerunTimedPose {
+    uint64_t timestamp_ns = 0u;
+    gtsam::Pose3 pose;
+  };
+
+  void updateRerunPoseHistory(uint64_t timestamp_ns,
+                              const gtsam::Pose3& pose);
+  bool maybeInitializeRerunWorldAlignment(
+      uint64_t peer_timestamp_ns,
+      const gtsam::Pose3& liorf_world_pose_body,
+      const std::string& key_token);
+
+  std::mutex rerun_world_alignment_mutex_;
+  std::vector<RerunTimedPose> rerun_kimera_pose_history_;
+  bool rerun_world_alignment_initialized_ = false;
+  gtsam::Pose3 rerun_liorf_T_kimera_world_;
+  double rerun_world_alignment_timestamp_delta_ms_ = 0.0;
 
   // Typedefs
   typedef pcl::PointCloud<pcl::PointXYZRGB> PointCloudXYZRGB;

@@ -37,6 +37,7 @@
   <arg name="rerun_recording_id" default=""/>
   <arg name="rerun_host" default="rerun+http://172.18.0.1:9876/proxy"/>
   <arg name="rerun_factor_graph_enable" default="true"/>
+  <arg name="rerun_world_alignment_enable" default="true"/>
   <arg name="include_pipeline_flags" default="false"/>
   <arg name="pipeline_flagfile"
        default="$(find kimera_vio)/params/S3EAlphaMonoXfeat/flags/Pipeline.flags"/>
@@ -53,6 +54,9 @@
   <arg name="cbs_use_persistent_bpsam_for_main_backend" default="false"/>
   <arg name="cbs_log_covariance_sanity_diff" default="false"/>
   <arg name="cbs_enable_soft_reset" default="true"/>
+  <arg name="cbs_use_raw_previous_belief_gate" default="false"/>
+  <arg name="cbs_d_reset" default="0.1"/>
+  <arg name="cbs_l2k_prior_factor_covariance_scale" default="1.0"/>
 
   <node if="$(arg decode_left_compressed)"
         pkg="kimera_vio_ros"

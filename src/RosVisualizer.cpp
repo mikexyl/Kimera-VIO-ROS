@@ -35,6 +35,7 @@
 #include <exception>
 #include <fstream>
 #include <limits>
+#include <mutex>
 #include <sstream>
 #include <string>
 
@@ -135,6 +136,10 @@ double poseErrorNorm(const gtsam::Pose3& lhs, const gtsam::Pose3& rhs) {
   } catch (...) {
     return std::numeric_limits<double>::quiet_NaN();
   }
+}
+
+uint64_t timestampAbsDiff(uint64_t lhs, uint64_t rhs) {
+  return lhs > rhs ? lhs - rhs : rhs - lhs;
 }
 
 std::string keyTokenForAgent(uint8_t source_agent, uint32_t pose_index) {
@@ -314,6 +319,8 @@ RosVisualizer::RosVisualizer(const VioParams& vio_params)
   nh_private_.param<std::string>("rerun_host", rerun_host, "auto");
   nh_private_.param(
       "rerun_factor_graph_enable", rerun_factor_graph_enable_, true);
+  nh_private_.param(
+      "rerun_world_alignment_enable", rerun_world_alignment_enable_, true);
   if (rerun_host.empty() || rerun_host == "auto") {
     rerun_host = defaultRerunHost();
   }
@@ -357,6 +364,67 @@ RosVisualizer::RosVisualizer(const VioParams& vio_params)
   } else {
     ROS_INFO("Kimera belief bridge disabled.");
   }
+}
+
+void RosVisualizer::updateRerunPoseHistory(uint64_t timestamp_ns,
+                                           const gtsam::Pose3& pose) {
+  if (!rerun_world_alignment_enable_) {
+    return;
+  }
+
+  std::lock_guard<std::mutex> lock(rerun_world_alignment_mutex_);
+  rerun_kimera_pose_history_.push_back({timestamp_ns, pose});
+
+  constexpr size_t kMaxPoseHistory = 2000u;
+  if (rerun_kimera_pose_history_.size() > kMaxPoseHistory) {
+    const size_t extra = rerun_kimera_pose_history_.size() - kMaxPoseHistory;
+    rerun_kimera_pose_history_.erase(rerun_kimera_pose_history_.begin(),
+                                     rerun_kimera_pose_history_.begin() +
+                                         extra);
+  }
+}
+
+bool RosVisualizer::maybeInitializeRerunWorldAlignment(
+    uint64_t peer_timestamp_ns,
+    const gtsam::Pose3& liorf_world_pose_body,
+    const std::string& key_token) {
+  if (!rerun_world_alignment_enable_ || !rerun_visualizer_) {
+    return false;
+  }
+
+  std::lock_guard<std::mutex> lock(rerun_world_alignment_mutex_);
+  if (rerun_world_alignment_initialized_ ||
+      rerun_kimera_pose_history_.empty()) {
+    return false;
+  }
+
+  auto nearest_it = rerun_kimera_pose_history_.end() - 1;
+  if (peer_timestamp_ns != 0u) {
+    nearest_it = std::min_element(
+        rerun_kimera_pose_history_.begin(),
+        rerun_kimera_pose_history_.end(),
+        [peer_timestamp_ns](const RerunTimedPose& lhs,
+                            const RerunTimedPose& rhs) {
+          return timestampAbsDiff(lhs.timestamp_ns, peer_timestamp_ns) <
+                 timestampAbsDiff(rhs.timestamp_ns, peer_timestamp_ns);
+        });
+  }
+
+  rerun_liorf_T_kimera_world_ =
+      liorf_world_pose_body * nearest_it->pose.inverse();
+  rerun_world_alignment_timestamp_delta_ms_ =
+      peer_timestamp_ns == 0u
+          ? 0.0
+          : static_cast<double>(
+                timestampAbsDiff(peer_timestamp_ns, nearest_it->timestamp_ns)) /
+                1.0e6;
+  rerun_world_alignment_initialized_ = true;
+
+  ROS_INFO_STREAM("Kimera Rerun world alignment initialized from "
+                  << key_token << " with nearest Kimera pose dt="
+                  << rerun_world_alignment_timestamp_delta_ms_
+                  << " ms. This only affects kimera_aligned/* visualization.");
+  return true;
 }
 
 uint8_t RosVisualizer::resolveAgentId(const std::string& agent_id) {
@@ -449,6 +517,7 @@ void RosVisualizer::publishRerunBackendOutput(
   }
 
   rerun_visualizer_->setTimeNSec(output->timestamp_);
+  updateRerunPoseHistory(output->timestamp_, output->W_State_Blkf_.pose_);
   rerun_visualizer_->drawTf(
       "kimera/base_link", output->W_State_Blkf_.pose_, 0.5f);
   const Eigen::Matrix3d current_pose_covariance =
@@ -521,6 +590,72 @@ void RosVisualizer::publishRerunBackendOutput(
                                   landmarks,
                                   Eigen::Vector4f(40.f, 220.f, 80.f, 180.f),
                                   2.f);
+  }
+
+  gtsam::Pose3 liorf_T_kimera_world;
+  bool world_alignment_initialized = false;
+  double world_alignment_timestamp_delta_ms = 0.0;
+  {
+    std::lock_guard<std::mutex> lock(rerun_world_alignment_mutex_);
+    world_alignment_initialized =
+        rerun_world_alignment_enable_ && rerun_world_alignment_initialized_;
+    if (world_alignment_initialized) {
+      liorf_T_kimera_world = rerun_liorf_T_kimera_world_;
+      world_alignment_timestamp_delta_ms =
+          rerun_world_alignment_timestamp_delta_ms_;
+    }
+  }
+
+  if (world_alignment_initialized) {
+    const gtsam::Pose3 aligned_pose =
+        liorf_T_kimera_world * output->W_State_Blkf_.pose_;
+    rerun_visualizer_->drawTf("kimera_aligned/base_link", aligned_pose, 0.6f);
+
+    const Eigen::Matrix3d alignment_rotation =
+        liorf_T_kimera_world.rotation().matrix();
+    const Eigen::Matrix3d aligned_pose_covariance =
+        alignment_rotation * current_pose_covariance *
+        alignment_rotation.transpose();
+    rerun_visualizer_->drawUncertainty(
+        "kimera_aligned/current_pose/uncertainty",
+        aligned_pose,
+        aligned_pose_covariance,
+        Eigen::Vector4f(64.f, 255.f, 255.f, 180.f),
+        1.25f);
+
+    if (rerun_trajectory_.size() > 1u) {
+      std::vector<gtsam::Pose3> aligned_trajectory;
+      aligned_trajectory.reserve(rerun_trajectory_.size());
+      for (const auto& pose : rerun_trajectory_) {
+        aligned_trajectory.push_back(liorf_T_kimera_world * pose);
+      }
+      rerun_visualizer_->drawTrajectory(
+          "kimera_aligned/trajectory",
+          aligned_trajectory,
+          Eigen::Vector4f(64.f, 255.f, 255.f, 255.f),
+          2.0f);
+    }
+
+    if (!landmarks.empty()) {
+      std::vector<gtsam::Point3> aligned_landmarks;
+      aligned_landmarks.reserve(landmarks.size());
+      for (const auto& landmark : landmarks) {
+        aligned_landmarks.push_back(liorf_T_kimera_world.transformFrom(
+            landmark));
+      }
+      rerun_visualizer_->drawPoints(
+          "kimera_aligned/landmarks",
+          aligned_landmarks,
+          Eigen::Vector4f(64.f, 255.f, 255.f, 160.f),
+          2.f);
+    }
+
+    rerun_visualizer_->drawScalar("kimera_aligned/alignment/initialized", 1.0);
+    rerun_visualizer_->drawScalar(
+        "kimera_aligned/alignment/timestamp_delta_ms",
+        world_alignment_timestamp_delta_ms);
+  } else if (rerun_world_alignment_enable_) {
+    rerun_visualizer_->drawScalar("kimera_aligned/alignment/initialized", 0.0);
   }
 
   if (rerun_factor_graph_enable_ && output->factor_graph_.size() > 0u &&
@@ -711,6 +846,9 @@ void RosVisualizer::poseBeliefInCallback(
       const std::string key_token = std::string("p:") +
                                     static_cast<char>(belief.source_agent) +
                                     ":" + std::to_string(belief.pose_index);
+      maybeInitializeRerunWorldAlignment(converted.sender_timestamp_ns,
+                                         transformed_pose,
+                                         key_token);
       LOG(INFO) << "CBS_TRANSPORT_ROW_L2K," << key_token << ","
                 << converted.sender_timestamp_ns << ","
                 << sanitizeCsvToken(belief.header.frame_id) << ","
