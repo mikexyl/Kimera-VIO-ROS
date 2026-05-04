@@ -53,6 +53,13 @@ file and include this one to launch KimeraVIO on the dataset of your choice -->
   <arg name="cbs_log_covariance_sanity_diff" default="false"/>
   <arg name="cbs_enable_soft_reset" default="true"/>
   <arg name="cbs_use_raw_previous_belief_gate" default="false"/>
+  <arg name="cbs_reject_first_message" default="true"/>
+  <arg name="cbs_use_temporary_cbs_prior_factors" default="false"/>
+  <arg name="cbs_use_temporary_cbs_linear_priors" default="true"/>
+  <arg name="cbs_temporary_linear_already_applied_gate_enable" default="true"/>
+  <arg name="cbs_temporary_linear_already_applied_metric_threshold" default="0.01"/>
+  <arg name="cbs_temporary_linear_already_applied_dmu_threshold" default="0.001"/>
+  <arg name="cbs_temporary_linear_already_applied_cov_rel_threshold" default="0.001"/>
   <arg name="cbs_d_reset" default="0.1"/>
   <arg name="cbs_l2k_prior_factor_covariance_scale" default="1.0"/>
   <!-- If true, KimeraVIO will compute a static offset between the
@@ -175,6 +182,13 @@ file and include this one to launch KimeraVIO on the dataset of your choice -->
               --cbs_log_covariance_sanity_diff=$(arg cbs_log_covariance_sanity_diff)
               --cbs_enable_soft_reset=$(arg cbs_enable_soft_reset)
               --cbs_use_raw_previous_belief_gate=$(arg cbs_use_raw_previous_belief_gate)
+              --cbs_reject_first_message=$(arg cbs_reject_first_message)
+              --cbs_use_temporary_cbs_prior_factors=$(arg cbs_use_temporary_cbs_prior_factors)
+              --cbs_use_temporary_cbs_linear_priors=$(arg cbs_use_temporary_cbs_linear_priors)
+              --cbs_temporary_linear_already_applied_gate_enable=$(arg cbs_temporary_linear_already_applied_gate_enable)
+              --cbs_temporary_linear_already_applied_metric_threshold=$(arg cbs_temporary_linear_already_applied_metric_threshold)
+              --cbs_temporary_linear_already_applied_dmu_threshold=$(arg cbs_temporary_linear_already_applied_dmu_threshold)
+              --cbs_temporary_linear_already_applied_cov_rel_threshold=$(arg cbs_temporary_linear_already_applied_cov_rel_threshold)
               --cbs_d_reset=$(arg cbs_d_reset)
               --cbs_l2k_prior_factor_covariance_scale=$(arg cbs_l2k_prior_factor_covariance_scale)
               --cbs_external_belief_timestamp_tolerance_sec=$(arg cbs_external_belief_timestamp_tolerance_sec)">

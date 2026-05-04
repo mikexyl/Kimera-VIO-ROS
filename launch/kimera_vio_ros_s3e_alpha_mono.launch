@@ -55,6 +55,13 @@
   <arg name="cbs_log_covariance_sanity_diff" default="false"/>
   <arg name="cbs_enable_soft_reset" default="true"/>
   <arg name="cbs_use_raw_previous_belief_gate" default="false"/>
+  <arg name="cbs_reject_first_message" default="true"/>
+  <arg name="cbs_use_temporary_cbs_prior_factors" default="false"/>
+  <arg name="cbs_use_temporary_cbs_linear_priors" default="true"/>
+  <arg name="cbs_temporary_linear_already_applied_gate_enable" default="true"/>
+  <arg name="cbs_temporary_linear_already_applied_metric_threshold" default="0.01"/>
+  <arg name="cbs_temporary_linear_already_applied_dmu_threshold" default="0.001"/>
+  <arg name="cbs_temporary_linear_already_applied_cov_rel_threshold" default="0.001"/>
   <arg name="cbs_d_reset" default="0.1"/>
   <arg name="cbs_l2k_prior_factor_covariance_scale" default="1.0"/>
 

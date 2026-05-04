@@ -23,8 +23,15 @@
   <arg name="liorf_belief_timestamp_tolerance_sec" default="0.12"/>
   <arg name="kimera_belief_timestamp_tolerance_sec" default="0.2"/>
   <arg name="liorf_belief_reject_first_message" default="true"/>
+  <arg name="kimera_belief_reject_first_message" default="true"/>
   <arg name="cbs_enable_soft_reset" default="true"/>
   <arg name="cbs_use_raw_previous_belief_gate" default="false"/>
+  <arg name="cbs_use_temporary_cbs_prior_factors" default="false"/>
+  <arg name="cbs_use_temporary_cbs_linear_priors" default="true"/>
+  <arg name="cbs_temporary_linear_already_applied_gate_enable" default="true"/>
+  <arg name="cbs_temporary_linear_already_applied_metric_threshold" default="0.01"/>
+  <arg name="cbs_temporary_linear_already_applied_dmu_threshold" default="0.001"/>
+  <arg name="cbs_temporary_linear_already_applied_cov_rel_threshold" default="0.001"/>
   <arg name="cbs_d_reset" default="0.1"/>
   <arg name="kimera_cbs_l2k_prior_factor_covariance_scale" default="1.0"/>
   <arg name="liorf_cbs_k2l_prior_factor_covariance_scale" default="1.0"/>
@@ -35,6 +42,7 @@
   <arg name="liorf_cbs_l2k_cov_audit_query_anchor_variance" default="1000000.0"/>
   <arg name="liorf_cbs_l2k_outgoing_covariance_mode" default="A_as_is_local_anchored"/>
   <arg name="liorf_cbs_l2k_outgoing_covariance_scale" default="1.0"/>
+  <arg name="liorf_cbs_conjugate_body_frame_conversion" default="true"/>
   <arg name="cbs_use_bpsam_for_local_belief_covariance" default="false"/>
   <arg name="cbs_use_persistent_bpsam_sidecar_for_belief_covariance"
        default="false"/>
@@ -71,6 +79,18 @@
     <arg name="cbs_enable_soft_reset" value="$(arg cbs_enable_soft_reset)"/>
     <arg name="cbs_use_raw_previous_belief_gate"
          value="$(arg cbs_use_raw_previous_belief_gate)"/>
+    <arg name="cbs_use_temporary_cbs_prior_factors"
+         value="$(arg cbs_use_temporary_cbs_prior_factors)"/>
+    <arg name="cbs_use_temporary_cbs_linear_priors"
+         value="$(arg cbs_use_temporary_cbs_linear_priors)"/>
+    <arg name="cbs_temporary_linear_already_applied_gate_enable"
+         value="$(arg cbs_temporary_linear_already_applied_gate_enable)"/>
+    <arg name="cbs_temporary_linear_already_applied_metric_threshold"
+         value="$(arg cbs_temporary_linear_already_applied_metric_threshold)"/>
+    <arg name="cbs_temporary_linear_already_applied_dmu_threshold"
+         value="$(arg cbs_temporary_linear_already_applied_dmu_threshold)"/>
+    <arg name="cbs_temporary_linear_already_applied_cov_rel_threshold"
+         value="$(arg cbs_temporary_linear_already_applied_cov_rel_threshold)"/>
     <arg name="cbs_d_reset" value="$(arg cbs_d_reset)"/>
     <arg name="cbs_k2l_prior_factor_covariance_scale"
          value="$(arg liorf_cbs_k2l_prior_factor_covariance_scale)"/>
@@ -89,6 +109,8 @@
          value="$(arg liorf_cbs_l2k_outgoing_covariance_mode)"/>
     <arg name="cbs_l2k_outgoing_covariance_scale"
          value="$(arg liorf_cbs_l2k_outgoing_covariance_scale)"/>
+    <arg name="cbs_conjugate_body_frame_conversion"
+         value="$(arg liorf_cbs_conjugate_body_frame_conversion)"/>
   </include>
 
   <include file="$(find kimera_vio_ros)/launch/kimera_vio_ros_s3e_alpha_mono.launch">
@@ -113,6 +135,20 @@
     <arg name="cbs_enable_soft_reset" value="$(arg cbs_enable_soft_reset)"/>
     <arg name="cbs_use_raw_previous_belief_gate"
          value="$(arg cbs_use_raw_previous_belief_gate)"/>
+    <arg name="cbs_reject_first_message"
+         value="$(arg kimera_belief_reject_first_message)"/>
+    <arg name="cbs_use_temporary_cbs_prior_factors"
+         value="$(arg cbs_use_temporary_cbs_prior_factors)"/>
+    <arg name="cbs_use_temporary_cbs_linear_priors"
+         value="$(arg cbs_use_temporary_cbs_linear_priors)"/>
+    <arg name="cbs_temporary_linear_already_applied_gate_enable"
+         value="$(arg cbs_temporary_linear_already_applied_gate_enable)"/>
+    <arg name="cbs_temporary_linear_already_applied_metric_threshold"
+         value="$(arg cbs_temporary_linear_already_applied_metric_threshold)"/>
+    <arg name="cbs_temporary_linear_already_applied_dmu_threshold"
+         value="$(arg cbs_temporary_linear_already_applied_dmu_threshold)"/>
+    <arg name="cbs_temporary_linear_already_applied_cov_rel_threshold"
+         value="$(arg cbs_temporary_linear_already_applied_cov_rel_threshold)"/>
     <arg name="cbs_d_reset" value="$(arg cbs_d_reset)"/>
     <arg name="cbs_l2k_prior_factor_covariance_scale"
          value="$(arg kimera_cbs_l2k_prior_factor_covariance_scale)"/>
