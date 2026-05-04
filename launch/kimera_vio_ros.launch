@@ -109,6 +109,8 @@ file and include this one to launch KimeraVIO on the dataset of your choice -->
   <arg name="viz_type"     default="0" />
   <!-- Use Rviz for visualization or OpenCV -->
   <arg name="use_rviz"     default="true"/>
+  <!-- Keep Kimera ROS publishers and Rerun logging active without requiring a display sink. -->
+  <arg name="use_ros_visualizer" default="true"/>
   <arg name="rerun_visualizer_enable" default="false"/>
   <arg name="rerun_recording_id" default=""/>
   <arg name="rerun_host" default="rerun+http://172.18.0.1:9876/proxy"/>
@@ -258,6 +260,7 @@ file and include this one to launch KimeraVIO on the dataset of your choice -->
 
     <!-- Visualize in Rviz or in OpenCV -->
     <param name="use_rviz"                value="$(arg use_rviz)"/>
+    <param name="use_ros_visualizer"      value="$(arg use_ros_visualizer)"/>
 
     <!-- TODO(nathan) consider not linking directly to arg -->
     <!-- Enable external processes to ask for a registration between two frames -->

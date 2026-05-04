@@ -33,6 +33,15 @@
 
 namespace VIO {
 
+namespace {
+class NullRosDisplay : public DisplayBase {
+ public:
+  NullRosDisplay() : DisplayBase(DisplayType::kOpenCV) {}
+
+  void spinOnce(DisplayInputBase::UniquePtr&& /*viz_output*/) override {}
+};
+}  // namespace
+
 #define MAKE_CONFIG_FILEPATH(dir_to_use, config_name) \
   dir_to_use + '/' + VioParams::k##config_name
 
@@ -41,6 +50,7 @@ KimeraVioRos::KimeraVioRos()
       vio_params_(nullptr),
       vio_pipeline_(nullptr),
       use_lcd_registration_server_(false),
+      use_ros_visualizer_(false),
       ros_display_(nullptr),
       ros_visualizer_(nullptr),
       data_provider_(nullptr),
@@ -51,6 +61,16 @@ KimeraVioRos::KimeraVioRos()
       "restart_kimera_vio", &KimeraVioRos::restartKimeraVio, this);
 
   CHECK(nh_private_.getParam("use_rviz", use_rviz_));
+
+  bool rerun_visualizer_enable = false;
+  bool cbs_belief_bridge_enable = true;
+  nh_private_.param("rerun_visualizer_enable", rerun_visualizer_enable, false);
+  nh_private_.param(
+      "cbs_belief_bridge_enable", cbs_belief_bridge_enable, true);
+  nh_private_.param("use_ros_visualizer",
+                    use_ros_visualizer_,
+                    use_rviz_ || rerun_visualizer_enable ||
+                        cbs_belief_bridge_enable);
 
   nh_private_.getParam("use_lcd_registration_server",
                        use_lcd_registration_server_);
@@ -98,17 +118,25 @@ bool KimeraVioRos::runKimeraVio() {
   // the data provider.
   // NOTE: had the data provider been destroyed before, the vio would be calling
   // the shutdown function of a deleted object, aka segfault.
-  if (use_rviz_) {
-    VLOG(1) << "Destroy Ros Display.";
-    ros_display_.reset();
-    ros_visualizer_.reset();
+  VLOG(1) << "Destroy Ros visualizer/display.";
+  ros_display_.reset();
+  ros_visualizer_.reset();
 
-    VLOG(1) << "Creating Ros Display.";
+  if (use_ros_visualizer_) {
+    VLOG(1) << "Creating Ros visualizer.";
     CHECK(vio_params_);
-    ros_display_ = std::make_unique<RosDisplay>();
     ros_visualizer_ = std::make_unique<RosVisualizer>(*vio_params_);
     ros_visualizer_->registerIncomingBeliefsCallback(std::bind(
         &KimeraVioRos::bufferExternalBeliefs, this, std::placeholders::_1));
+    if (use_rviz_) {
+      ros_display_ = std::make_unique<RosDisplay>();
+    } else {
+      ros_display_ = std::make_unique<NullRosDisplay>();
+    }
+    ROS_INFO_STREAM("Kimera ROS visualizer enabled. Rerun and ROS publishers "
+                    << "are active; display sink is "
+                    << (use_rviz_ ? "RosDisplay image publishers" : "disabled")
+                    << ".");
   } else {
     ros_display_ = nullptr;
     ros_visualizer_ = nullptr;
@@ -136,9 +164,9 @@ bool KimeraVioRos::runKimeraVio() {
 
   // Then, create Kimera-VIO from scratch.
   VLOG(1) << "Creating Kimera-VIO.";
-  if (use_rviz_) {
-    CHECK(ros_display_);
+  if (use_ros_visualizer_) {
     CHECK(ros_visualizer_);
+    CHECK(ros_display_);
   }
 
   vio_pipeline_ = nullptr;

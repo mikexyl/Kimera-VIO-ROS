@@ -410,6 +410,11 @@ VisualizerOutput::UniquePtr RosVisualizer::spinOnce(
     publishFrontendOutput(viz_input.frontend_output_);
   }
 
+  if (viz_input.frontend_output_ && viz_input.backend_output_ &&
+      resiliency_pub_.getNumSubscribers() > 0) {
+    publishResiliency(viz_input.frontend_output_, viz_input.backend_output_);
+  }
+
   if (viz_input.backend_output_) {
     publishBackendOutput(viz_input.backend_output_);
   }
@@ -1065,6 +1070,13 @@ void RosVisualizer::publishResiliency(
   // Get frontend and velocity covariance data for resiliency output
   const DebugTrackerInfo& debug_tracker_info =
       frontend_output->getTrackerInfo();
+  if (backend_output->state_covariance_lkf_.rows() < 9 ||
+      backend_output->state_covariance_lkf_.cols() < 9) {
+    ROS_WARN_THROTTLE(1.0,
+                      "Skipping Kimera resiliency publish: backend covariance "
+                      "is smaller than the expected 9x9 pose/velocity block.");
+    return;
+  }
   const gtsam::Matrix6& pose_cov =
       gtsam::sub(backend_output->state_covariance_lkf_, 0, 6, 0, 6);
   const gtsam::Matrix3& vel_cov =
@@ -1072,6 +1084,7 @@ void RosVisualizer::publishResiliency(
 
   // Create message type for quality of KimeraVIO
   std_msgs::Float64MultiArray resiliency_msg;
+  resiliency_msg.layout.dim.resize(1);
 
   // Publishing extra information:
   // cov_v_det and nrStIn should be the most relevant!
@@ -1118,7 +1131,6 @@ void RosVisualizer::publishResiliency(
   resiliency_msg.data[7] = mono_ransac_theshold;
 
   // Build Message Layout
-  resiliency_msg.layout.dim.resize(1);
   resiliency_msg.layout.dim[0].size = resiliency_msg.data.size();
   resiliency_msg.layout.dim[0].stride = 1;
 

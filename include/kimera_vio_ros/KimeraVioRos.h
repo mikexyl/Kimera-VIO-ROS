@@ -70,8 +70,9 @@ class KimeraVioRos {
   RosDataProviderInterface::UniquePtr data_provider_;
 
   //! Visualization
-  bool use_rviz_;  //! whether we want to use rviz for visualization or opencv.
-  RosDisplay::UniquePtr ros_display_;
+  bool use_rviz_;  //! Legacy name: whether to publish RosDisplay images.
+  bool use_ros_visualizer_;
+  DisplayBase::UniquePtr ros_display_;
   RosVisualizer::UniquePtr ros_visualizer_;
   RosLoopClosureVisualizer::Ptr ros_lcd_visualizer_;
 

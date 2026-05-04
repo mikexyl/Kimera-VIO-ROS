@@ -13,7 +13,8 @@
   <arg name="liorf_rerun_local_map_max_points" default="10000"/>
   <arg name="liorf_use_gps" default="false"/>
 
-  <arg name="use_kimera_rviz" default="true"/>
+  <arg name="use_kimera_rviz" default="false"/>
+  <arg name="kimera_use_ros_visualizer" default="true"/>
   <arg name="use_liorf_rviz" default="false"/>
   <arg name="kimera_visualize" default="true"/>
   <arg name="kimera_params_folder"
@@ -83,6 +84,7 @@
     <arg name="should_use_sim_time" value="true"/>
     <arg name="params_folder" value="$(arg kimera_params_folder)"/>
     <arg name="use_rviz" value="$(arg use_kimera_rviz)"/>
+    <arg name="use_ros_visualizer" value="$(arg kimera_use_ros_visualizer)"/>
     <arg name="visualize" value="$(arg kimera_visualize)"/>
     <arg name="rerun_visualizer_enable"
          value="$(arg rerun_visualizer_enable)"/>
