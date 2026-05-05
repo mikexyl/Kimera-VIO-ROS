@@ -7,14 +7,24 @@
 #include "kimera_vio_ros/KimeraVioRos.h"
 
 #include <algorithm>
+#include <cctype>
+#include <cmath>
+#include <cstdlib>
 #include <functional>
 #include <future>
+#include <fstream>
+#include <limits>
+#include <sstream>
+#include <string>
+#include <ctime>
 
 // Still need gflags for parameters in VIO
 #include <gflags/gflags.h>
 #include <glog/logging.h>
 
 // Dependencies from ROS
+#include <geometry_msgs/Transform.h>
+#include <nav_msgs/Odometry.h>
 #include <ros/ros.h>
 #include <std_srvs/Trigger.h>
 #include <std_srvs/TriggerRequest.h>
@@ -30,8 +40,211 @@
 #include "kimera_vio_ros/RosBagDataProvider.h"
 #include "kimera_vio_ros/RosDataProviderInterface.h"
 #include "kimera_vio_ros/RosOnlineDataProvider.h"
+#include "kimera_vio_ros/utils/UtilsRos.h"
 
 namespace VIO {
+
+namespace {
+
+gtsam::Matrix6 sanitizePoseCovariance(const gtsam::Matrix& state_covariance) {
+  gtsam::Matrix6 pose_cov = gtsam::Matrix6::Identity() * 1e-3;
+  if (state_covariance.rows() >= 6 && state_covariance.cols() >= 6) {
+    pose_cov = gtsam::sub(state_covariance, 0, 6, 0, 6);
+  }
+
+  pose_cov = 0.5 * (pose_cov + pose_cov.transpose());
+  for (size_t i = 0u; i < 6u; ++i) {
+    if (!std::isfinite(pose_cov(i, i)) || pose_cov(i, i) <= 1e-9) {
+      pose_cov(i, i) = 1e-3;
+    }
+  }
+  return pose_cov;
+}
+
+Eigen::Matrix3d sanitizeTranslationCovariance(
+    const gtsam::Matrix& pose_covariance) {
+  Eigen::Matrix3d covariance = Eigen::Matrix3d::Identity() * 1e-3;
+  if (pose_covariance.rows() >= 6 && pose_covariance.cols() >= 6) {
+    covariance = pose_covariance.block<3, 3>(3, 3);
+  }
+
+  covariance = 0.5 * (covariance + covariance.transpose());
+  if (!covariance.allFinite()) {
+    return Eigen::Matrix3d::Identity() * 1e-3;
+  }
+
+  Eigen::SelfAdjointEigenSolver<Eigen::Matrix3d> eig(covariance);
+  if (eig.info() != Eigen::Success) {
+    return Eigen::Matrix3d::Identity() * 1e-3;
+  }
+
+  const Eigen::Vector3d eigenvalues =
+      eig.eigenvalues().array().max(1e-9).matrix();
+  return eig.eigenvectors() * eigenvalues.asDiagonal() *
+         eig.eigenvectors().transpose();
+}
+
+std::string sanitizeCsvToken(std::string token) {
+  std::replace(token.begin(), token.end(), ',', '_');
+  std::replace(token.begin(), token.end(), ' ', '_');
+  return token.empty() ? "na" : token;
+}
+
+std::string vector6ToToken(const gtsam::Vector6& vector) {
+  std::ostringstream oss;
+  oss << "v[";
+  for (size_t i = 0u; i < 6u; ++i) {
+    if (i > 0u) {
+      oss << ";";
+    }
+    oss << vector(i);
+  }
+  oss << "]";
+  return oss.str();
+}
+
+std::string matrix6ToToken(const gtsam::Matrix6& matrix) {
+  std::ostringstream oss;
+  oss << "m[";
+  for (size_t r = 0u; r < 6u; ++r) {
+    if (r > 0u) {
+      oss << "|";
+    }
+    for (size_t c = 0u; c < 6u; ++c) {
+      if (c > 0u) {
+        oss << ";";
+      }
+      oss << matrix(r, c);
+    }
+  }
+  oss << "]";
+  return oss.str();
+}
+
+double minEigenvalueSymmetric(const gtsam::Matrix6& matrix) {
+  Eigen::SelfAdjointEigenSolver<gtsam::Matrix6> eig(
+      0.5 * (matrix + matrix.transpose()));
+  if (eig.info() != Eigen::Success) {
+    return std::numeric_limits<double>::quiet_NaN();
+  }
+  return eig.eigenvalues().minCoeff();
+}
+
+double poseErrorNorm(const gtsam::Pose3& lhs, const gtsam::Pose3& rhs) {
+  try {
+    return gtsam::Pose3::Logmap(lhs.inverse() * rhs).norm();
+  } catch (...) {
+    return std::numeric_limits<double>::quiet_NaN();
+  }
+}
+
+std::string keyTokenForAgent(uint8_t source_agent, uint32_t pose_index) {
+  std::ostringstream oss;
+  oss << "p:";
+  if (std::isprint(static_cast<unsigned char>(source_agent))) {
+    oss << static_cast<char>(source_agent);
+  } else {
+    oss << static_cast<int>(source_agent);
+  }
+  oss << ":" << pose_index;
+  return oss.str();
+}
+
+uint8_t resolveAgentId(const std::string& agent_id) {
+  return agent_id.empty() ? static_cast<uint8_t>('k')
+                          : static_cast<uint8_t>(agent_id.front());
+}
+
+std::string makeRerunRecordingId(const std::string& prefix) {
+  std::time_t now = std::time(nullptr);
+  std::tm local_time{};
+  localtime_r(&now, &local_time);
+
+  char buffer[32];
+  std::strftime(buffer, sizeof(buffer), "%Y%m%d_%H%M%S", &local_time);
+  return prefix + "_" + buffer;
+}
+
+std::string getDockerGatewayIp() {
+  std::ifstream route_file("/proc/net/route");
+  std::string line;
+  std::getline(route_file, line);
+  while (std::getline(route_file, line)) {
+    std::istringstream iss(line);
+    std::string iface;
+    std::string destination;
+    std::string gateway;
+    unsigned int flags = 0u;
+    if (!(iss >> iface >> destination >> gateway >> std::hex >> flags)) {
+      continue;
+    }
+    if (destination != "00000000" || gateway.size() != 8u) {
+      continue;
+    }
+
+    const unsigned long raw_gateway = std::stoul(gateway, nullptr, 16);
+    std::ostringstream ip;
+    ip << (raw_gateway & 0xfful) << "." << ((raw_gateway >> 8u) & 0xfful)
+       << "." << ((raw_gateway >> 16u) & 0xfful) << "."
+       << ((raw_gateway >> 24u) & 0xfful);
+    return ip.str();
+  }
+  return "";
+}
+
+std::string defaultRerunHost() {
+  const char* env_host = std::getenv("CBSMS_RERUN_HOST");
+  if (env_host != nullptr && std::string(env_host).empty() == false) {
+    return env_host;
+  }
+
+  const std::string gateway_ip = getDockerGatewayIp();
+  if (!gateway_ip.empty()) {
+    return "rerun+http://" + gateway_ip + ":9876/proxy";
+  }
+
+  return "rerun+http://host.docker.internal:9876/proxy";
+}
+
+template <typename Array6>
+gtsam::Vector6 toVector6(const Array6& values) {
+  gtsam::Vector6 vector = gtsam::Vector6::Zero();
+  for (size_t i = 0u; i < 6u; ++i) {
+    vector(i) = values[i];
+  }
+  return vector;
+}
+
+template <typename Array36>
+gtsam::Matrix6 toMatrix6(const Array36& values) {
+  gtsam::Matrix6 matrix = gtsam::Matrix6::Zero();
+  for (size_t r = 0u; r < 6u; ++r) {
+    for (size_t c = 0u; c < 6u; ++c) {
+      matrix(r, c) = values[r * 6u + c];
+    }
+  }
+  return matrix;
+}
+
+template <typename Array6>
+void fromVector6(const gtsam::Vector6& vector, Array6* values) {
+  CHECK_NOTNULL(values);
+  for (size_t i = 0u; i < 6u; ++i) {
+    (*values)[i] = vector(i);
+  }
+}
+
+template <typename Array36>
+void fromMatrix6(const gtsam::Matrix6& matrix, Array36* values) {
+  CHECK_NOTNULL(values);
+  for (size_t r = 0u; r < 6u; ++r) {
+    for (size_t c = 0u; c < 6u; ++c) {
+      (*values)[r * 6u + c] = matrix(r, c);
+    }
+  }
+}
+
+}  // namespace
 
 #define MAKE_CONFIG_FILEPATH(dir_to_use, config_name) \
   dir_to_use + '/' + VioParams::k##config_name
@@ -75,6 +288,57 @@ KimeraVioRos::KimeraVioRos()
       "cbs_belief_forward_queue_limit", cbs_forward_queue_limit, 800);
   external_beliefs_queue_limit_ =
       static_cast<size_t>(std::max(1, cbs_forward_queue_limit));
+
+  nh_private_.param(
+      "cbs_belief_bridge_enable", headless_cbs_belief_bridge_enable_, true);
+  nh_private_.param(
+      "headless_odometry_publish_enable", headless_odometry_publish_enable_, true);
+  nh_private_.param(
+      "rerun_visualizer_enable", headless_rerun_visualizer_enable_, false);
+  nh_private_.param("rerun_factor_graph_enable",
+                    headless_rerun_factor_graph_enable_,
+                    true);
+  nh_private_.param<std::string>(
+      "rerun_recording_id", headless_rerun_recording_id_, "");
+  nh_private_.param<std::string>("rerun_host", headless_rerun_host_, "auto");
+  if (headless_rerun_host_.empty() || headless_rerun_host_ == "auto") {
+    headless_rerun_host_ = defaultRerunHost();
+  }
+  if (headless_rerun_recording_id_.empty()) {
+    ros::param::param<std::string>(
+        "/cbsms/rerun_recording_id", headless_rerun_recording_id_, "");
+  }
+  if (headless_rerun_recording_id_.empty()) {
+    headless_rerun_recording_id_ = makeRerunRecordingId("kimera_vio_ros");
+  }
+  nh_private_.param<std::string>("odom_frame_id", odom_frame_id_, "odom");
+  nh_private_.param<std::string>(
+      "base_link_frame_id", base_link_frame_id_, "base_link");
+  nh_private_.param<std::string>(
+      "cbs_belief_in_topic", cbs_belief_in_topic_, "kimera/cbs/belief_in");
+  nh_private_.param<std::string>(
+      "cbs_belief_out_topic", cbs_belief_out_topic_, "kimera/cbs/belief_out");
+  nh_private_.param<std::string>("cbs_odom_belief_in_topic",
+                                 cbs_odom_belief_in_topic_,
+                                 "kimera/cbs/odom_belief_in");
+  nh_private_.param<std::string>("cbs_odom_belief_out_topic",
+                                 cbs_odom_belief_out_topic_,
+                                 "kimera/cbs/odom_belief_out");
+  nh_private_.param<std::string>("cbs_external_pose_frame_id",
+                                 cbs_external_pose_frame_id_,
+                                 base_link_frame_id_);
+  if (cbs_external_pose_frame_id_.empty()) {
+    cbs_external_pose_frame_id_ = base_link_frame_id_;
+  }
+  std::string cbs_agent_id = "k";
+  nh_private_.param<std::string>("cbs_agent_id", cbs_agent_id, "k");
+  cbs_agent_id_ = resolveAgentId(cbs_agent_id);
+
+  if (!use_rviz_) {
+    initializeHeadlessOdometryPublisher();
+    initializeHeadlessCbsBeliefBridge();
+    initializeHeadlessRerunVisualizer();
+  }
 }
 
 #undef MAKE_CONFIG_FILEPATH
@@ -172,6 +436,14 @@ bool KimeraVioRos::runKimeraVio() {
   }
 
   CHECK(vio_pipeline_) << "Vio pipeline construction failed.";
+  if (!use_rviz_ &&
+      (headless_odometry_publish_enable_ || headless_cbs_belief_bridge_enable_ ||
+       headless_rerun_visualizer_)) {
+    vio_pipeline_->registerExternalBackendOutputCallback(
+        [this](const BackendOutput::Ptr& output) {
+          publishHeadlessBackendOutput(output);
+        });
+  }
   if (use_lcd_registration_server_) {
     LcdModule* lcd = vio_pipeline_->getLcdModule();
     if (!lcd) {
@@ -216,6 +488,7 @@ bool KimeraVioRos::spin() {
     ros::WallRate rate(20);  // 20 Hz
     while (ros::ok() && !restart_vio_pipeline_) {
       flushExternalBeliefsToPipeline();
+      flushExternalOdometryBeliefsToPipeline();
 
       const auto stats = vio_pipeline_->printStatistics();
       if (!stats.empty()) {
@@ -258,6 +531,7 @@ bool KimeraVioRos::spin() {
     ros::start();
     while (ros::ok() && data_provider_->spin() && vio_pipeline_->spin()) {
       flushExternalBeliefsToPipeline();
+      flushExternalOdometryBeliefsToPipeline();
 
       // TODO(Toni): right now this will loop forwever unless ROS dies or Ctrl+C
       LOG(INFO) << vio_pipeline_->printStatistics();
@@ -363,6 +637,22 @@ void KimeraVioRos::bufferExternalBeliefs(
   }
 }
 
+void KimeraVioRos::bufferExternalOdometryBeliefs(
+    const std::vector<ExternalOdometryBelief>& beliefs) {
+  if (beliefs.empty()) {
+    return;
+  }
+
+  std::lock_guard<std::mutex> lock(external_beliefs_mutex_);
+  for (const auto& belief : beliefs) {
+    pending_external_odom_beliefs_.push_back(belief);
+  }
+  while (pending_external_odom_beliefs_.size() >
+         external_beliefs_queue_limit_) {
+    pending_external_odom_beliefs_.pop_front();
+  }
+}
+
 void KimeraVioRos::flushExternalBeliefsToPipeline() {
   if (!vio_pipeline_) {
     return;
@@ -381,6 +671,650 @@ void KimeraVioRos::flushExternalBeliefsToPipeline() {
   if (!beliefs_to_forward.empty()) {
     vio_pipeline_->enqueueExternalPoseBeliefs(beliefs_to_forward);
   }
+}
+
+void KimeraVioRos::flushExternalOdometryBeliefsToPipeline() {
+  if (!vio_pipeline_) {
+    return;
+  }
+
+  std::vector<ExternalOdometryBelief> beliefs_to_forward;
+  {
+    std::lock_guard<std::mutex> lock(external_beliefs_mutex_);
+    beliefs_to_forward.reserve(pending_external_odom_beliefs_.size());
+    while (!pending_external_odom_beliefs_.empty()) {
+      beliefs_to_forward.push_back(pending_external_odom_beliefs_.front());
+      pending_external_odom_beliefs_.pop_front();
+    }
+  }
+
+  if (!beliefs_to_forward.empty()) {
+    vio_pipeline_->enqueueExternalOdometryBeliefs(beliefs_to_forward);
+  }
+}
+
+void KimeraVioRos::initializeHeadlessCbsBeliefBridge() {
+  if (!headless_cbs_belief_bridge_enable_) {
+    LOG(INFO) << "Kimera headless belief bridge disabled.";
+    return;
+  }
+
+  ros::NodeHandle nh;
+  pose_belief_out_pub_ =
+      nh.advertise<liorf::pose_belief_array>(cbs_belief_out_topic_, 50);
+  pose_odom_belief_out_pub_ =
+      nh.advertise<liorf::pose_odom_belief_array>(
+          cbs_odom_belief_out_topic_, 50);
+  pose_belief_in_sub_ = nh.subscribe<liorf::pose_belief_array>(
+      cbs_belief_in_topic_,
+      50,
+      &KimeraVioRos::poseBeliefInCallback,
+      this,
+      ros::TransportHints().tcpNoDelay());
+  pose_odom_belief_in_sub_ =
+      nh.subscribe<liorf::pose_odom_belief_array>(
+          cbs_odom_belief_in_topic_,
+          50,
+          &KimeraVioRos::poseOdomBeliefInCallback,
+          this,
+          ros::TransportHints().tcpNoDelay());
+
+  LOG(INFO) << "Kimera headless belief bridge enabled. agent='"
+            << static_cast<char>(cbs_agent_id_) << "', in='"
+            << cbs_belief_in_topic_ << "', out='" << cbs_belief_out_topic_
+            << "', odom_in='" << cbs_odom_belief_in_topic_
+            << "', odom_out='" << cbs_odom_belief_out_topic_
+            << "', external_pose_frame='" << cbs_external_pose_frame_id_
+            << "'.";
+}
+
+void KimeraVioRos::initializeHeadlessOdometryPublisher() {
+  if (!headless_odometry_publish_enable_) {
+    LOG(INFO) << "Kimera headless odometry publisher disabled.";
+    return;
+  }
+
+  ros::NodeHandle nh;
+  headless_odometry_pub_ =
+      nh.advertise<nav_msgs::Odometry>("odometry", 10, true);
+  LOG(INFO) << "Kimera headless odometry publisher enabled on topic '"
+            << headless_odometry_pub_.getTopic() << "'.";
+}
+
+void KimeraVioRos::initializeHeadlessRerunVisualizer() {
+  if (!headless_rerun_visualizer_enable_) {
+    LOG(INFO) << "Kimera headless Rerun visualizer disabled.";
+    return;
+  }
+
+  headless_rerun_visualizer_ = std::make_unique<RosRerunVisualizer>(
+      "cbsms", headless_rerun_recording_id_, headless_rerun_host_);
+  LOG(INFO) << "Kimera headless Rerun visualizer enabled. recording_id='"
+            << headless_rerun_recording_id_ << "', host='"
+            << headless_rerun_host_ << "'.";
+}
+
+void KimeraVioRos::publishHeadlessBackendOutput(
+    const BackendOutput::ConstPtr& output) {
+  publishHeadlessOdometry(output);
+  publishHeadlessRerunBackendOutput(output);
+  publishHeadlessPoseBelief(output);
+  publishHeadlessOdometryBelief(output);
+}
+
+void KimeraVioRos::publishHeadlessOdometry(
+    const BackendOutput::ConstPtr& output) {
+  try {
+    CHECK(output);
+    if (!headless_odometry_publish_enable_) {
+      return;
+    }
+
+    const Timestamp& ts = output->timestamp_;
+    const gtsam::Pose3& pose = output->W_State_Blkf_.pose_;
+    const gtsam::Rot3& rotation = pose.rotation();
+    const gtsam::Quaternion& quaternion = rotation.toQuaternion();
+    const gtsam::Vector3& velocity = output->W_State_Blkf_.velocity_;
+    const gtsam::Matrix6 pose_cov =
+        sanitizePoseCovariance(output->state_covariance_lkf_);
+    gtsam::Matrix3 vel_cov = gtsam::Matrix3::Identity() * 1e-3;
+    if (output->state_covariance_lkf_.rows() >= 9 &&
+        output->state_covariance_lkf_.cols() >= 9) {
+      vel_cov = gtsam::sub(output->state_covariance_lkf_, 6, 9, 6, 9);
+    }
+
+    nav_msgs::Odometry odometry_msg;
+    odometry_msg.header.stamp.fromNSec(ts);
+    odometry_msg.header.frame_id = odom_frame_id_;
+    odometry_msg.child_frame_id = base_link_frame_id_;
+
+    odometry_msg.pose.pose.position.x = pose.x();
+    odometry_msg.pose.pose.position.y = pose.y();
+    odometry_msg.pose.pose.position.z = pose.z();
+    odometry_msg.pose.pose.orientation.w = quaternion.w();
+    odometry_msg.pose.pose.orientation.x = quaternion.x();
+    odometry_msg.pose.pose.orientation.y = quaternion.y();
+    odometry_msg.pose.pose.orientation.z = quaternion.z();
+
+    static const std::vector<int> remapping{3, 4, 5, 0, 1, 2};
+    for (int i = 0; i < pose_cov.rows(); ++i) {
+      for (int j = 0; j < pose_cov.cols(); ++j) {
+        odometry_msg.pose.covariance[remapping[i] * pose_cov.cols() +
+                                     remapping[j]] = pose_cov(i, j);
+      }
+    }
+
+    const gtsam::Matrix3 inversed_rotation = rotation.transpose();
+    const gtsam::Vector3 velocity_body = inversed_rotation * velocity;
+    odometry_msg.twist.twist.linear.x = velocity_body(0);
+    odometry_msg.twist.twist.linear.y = velocity_body(1);
+    odometry_msg.twist.twist.linear.z = velocity_body(2);
+
+    const gtsam::Matrix3 vel_cov_body =
+        inversed_rotation.matrix() * vel_cov * rotation.matrix();
+    for (int i = 0; i < vel_cov_body.rows(); ++i) {
+      for (int j = 0; j < vel_cov_body.cols(); ++j) {
+        odometry_msg.twist.covariance[i * 6 + j] = vel_cov_body(i, j);
+      }
+    }
+
+    headless_odometry_pub_.publish(odometry_msg);
+  } catch (const std::exception& e) {
+    LOG(WARNING) << "Kimera headless odometry publish skipped: " << e.what();
+  } catch (...) {
+    LOG(WARNING) << "Kimera headless odometry publish skipped.";
+  }
+}
+
+void KimeraVioRos::publishHeadlessRerunBackendOutput(
+    const BackendOutput::ConstPtr& output) {
+  try {
+    CHECK(output);
+    if (!headless_rerun_visualizer_) {
+      return;
+    }
+
+    const gtsam::Pose3& pose = output->W_State_Blkf_.pose_;
+    headless_rerun_visualizer_->setTimeNSec(output->timestamp_);
+    headless_rerun_visualizer_->drawTf("kimera/base_link", pose, 0.5f);
+
+    const Eigen::Matrix3d current_pose_covariance =
+        sanitizeTranslationCovariance(output->state_covariance_lkf_);
+    headless_rerun_visualizer_->drawUncertainty(
+        "kimera/current_pose/uncertainty",
+        pose,
+        current_pose_covariance,
+        Eigen::Vector4f(40.f, 220.f, 80.f, 160.f),
+        1.25f);
+    headless_rerun_visualizer_->drawScalar(
+        "kimera/current_pose/kimera_uncertainty_frobenius_norm",
+        current_pose_covariance.norm());
+    headless_rerun_visualizer_->drawScalar("kimera/keyframe_id",
+                                           output->cur_kf_id_);
+    headless_rerun_visualizer_->drawScalar(
+        "kimera/timing/optimization_ms",
+        output->optimization_time_sec_ * 1000.0);
+
+    if (headless_cbs_belief_bridge_enable_) {
+      headless_rerun_visualizer_->drawScalar(
+          "kimera/cbs/beliefs/added_to_factor_graph_per_update",
+          output->external_beliefs_added_per_update_);
+      headless_rerun_visualizer_->drawScalar(
+          "kimera/cbs/beliefs/rejected_first_message_per_update",
+          output->external_beliefs_rejected_first_message_per_update_);
+      headless_rerun_visualizer_->drawScalar(
+          "kimera/cbs/beliefs/rejected_update_status_per_update",
+          output->external_beliefs_rejected_update_status_per_update_);
+      headless_rerun_visualizer_->drawScalar(
+          "kimera/cbs/beliefs/rejected_inactive_window_per_update",
+          output->external_beliefs_rejected_inactive_window_per_update_);
+      headless_rerun_visualizer_->drawScalar(
+          "kimera/cbs/beliefs/rejected_shape_per_update",
+          output->external_beliefs_rejected_shape_per_update_);
+      headless_rerun_visualizer_->drawScalar(
+          "kimera/cbs/beliefs/rejected_exception_per_update",
+          output->external_beliefs_rejected_exception_per_update_);
+      headless_rerun_visualizer_->drawScalar(
+          "kimera/cbs/timing/belief_generation_ms",
+          output->cbs_belief_generation_time_sec_ * 1000.0);
+      headless_rerun_visualizer_->drawScalar(
+          "kimera/cbs/marginalization_graph/factor_count",
+          output->cbs_marginalization_graph_factor_count_);
+    }
+
+    const int64_t current_kf_id = static_cast<int64_t>(output->cur_kf_id_);
+    if (current_kf_id != headless_rerun_last_kf_id_) {
+      headless_rerun_trajectory_.push_back(pose);
+      headless_rerun_last_kf_id_ = current_kf_id;
+    }
+    if (headless_rerun_trajectory_.size() > 1u) {
+      headless_rerun_visualizer_->drawTrajectory(
+          "kimera/trajectory",
+          headless_rerun_trajectory_,
+          Eigen::Vector4f(40.f, 220.f, 80.f, 255.f),
+          1.5f);
+    }
+
+    std::vector<gtsam::Point3> landmarks;
+    landmarks.reserve(output->landmarks_with_id_map_.size());
+    for (const auto& id_landmark : output->landmarks_with_id_map_) {
+      landmarks.emplace_back(id_landmark.second);
+    }
+    if (!landmarks.empty()) {
+      headless_rerun_visualizer_->drawPoints(
+          "kimera/landmarks",
+          landmarks,
+          Eigen::Vector4f(40.f, 220.f, 80.f, 180.f),
+          2.f);
+    }
+
+    if (headless_rerun_factor_graph_enable_ &&
+        output->factor_graph_.size() > 0u && output->state_.size() > 0u) {
+      headless_rerun_visualizer_->drawFactors(
+          "kimera/factor_graph",
+          output->factor_graph_,
+          output->state_,
+          Eigen::Vector4f(40.f, 220.f, 80.f, 180.f),
+          0.75f);
+      headless_rerun_visualizer_->drawScalar(
+          "kimera/factor_graph/factors_total", output->factor_graph_.size());
+    }
+  } catch (const std::exception& e) {
+    LOG(WARNING) << "Kimera headless Rerun publish skipped: " << e.what();
+  } catch (...) {
+    LOG(WARNING) << "Kimera headless Rerun publish skipped.";
+  }
+}
+
+void KimeraVioRos::publishHeadlessPoseBelief(
+    const BackendOutput::ConstPtr& output) {
+  try {
+    CHECK(output);
+    if (!headless_cbs_belief_bridge_enable_ ||
+        output->cbs_outgoing_pose_beliefs_.empty()) {
+      return;
+    }
+
+    liorf::pose_belief_array msg;
+    msg.header.stamp.fromNSec(output->timestamp_);
+    msg.header.frame_id = odom_frame_id_;
+    msg.beliefs.reserve(output->cbs_outgoing_pose_beliefs_.size());
+
+    const bool publishes_external_pose_frame =
+        (cbs_external_pose_frame_id_ != base_link_frame_id_);
+    const std::string frame_semantic = publishes_external_pose_frame
+                                           ? "world_to_external_pose"
+                                           : "world_to_body_pose";
+    const std::string cov_semantic = publishes_external_pose_frame
+                                         ? "tangent_at_external_frame_pose"
+                                         : "tangent_at_body_frame_pose";
+
+    gtsam::Pose3 base_T_external;
+    gtsam::Pose3 external_T_base;
+    if (publishes_external_pose_frame &&
+        !lookupExternalPoseFrameTransform(&base_T_external,
+                                          &external_T_base)) {
+      return;
+    }
+
+    for (const auto& cbs_belief : output->cbs_outgoing_pose_beliefs_) {
+      liorf::pose_belief belief;
+      belief.header = msg.header;
+      belief.source_agent = cbs_belief.source_agent;
+      belief.pose_index = cbs_belief.pose_index;
+      belief.stamp_sec = cbs_belief.stamp_sec > 0.0 ? cbs_belief.stamp_sec
+                                                    : msg.header.stamp.toSec();
+      belief.relax_factor = cbs_belief.relax_factor;
+
+      gtsam::Pose3 pose_to_publish =
+          gtsam::Pose3::Expmap(toVector6(cbs_belief.mu));
+      gtsam::Matrix6 covariance_to_publish =
+          sanitizePoseCovariance(toMatrix6(cbs_belief.covariance));
+
+      if (publishes_external_pose_frame) {
+        pose_to_publish = pose_to_publish * base_T_external;
+        const gtsam::Matrix6 adjoint_external_base =
+            external_T_base.AdjointMap();
+        covariance_to_publish = sanitizePoseCovariance(
+            adjoint_external_base * covariance_to_publish *
+            adjoint_external_base.transpose());
+      }
+
+      fromVector6(gtsam::Pose3::Logmap(pose_to_publish), &belief.mu);
+      fromMatrix6(covariance_to_publish, &belief.covariance);
+      msg.beliefs.push_back(belief);
+
+      LOG(INFO) << "CBS_KIMERA_OUTGOING_PROVENANCE_ROW,"
+                << keyTokenForAgent(belief.source_agent, belief.pose_index)
+                << "," << belief.header.stamp.toNSec() << ","
+                << "Kimera::bpsam_getBeliefs_local_marginalization,true,true,"
+                << "false," << frame_semantic << "," << cov_semantic;
+    }
+
+    if (!msg.beliefs.empty()) {
+      pose_belief_out_pub_.publish(msg);
+    }
+  } catch (const std::exception& e) {
+    LOG(WARNING) << "Kimera headless CBS pose belief publish skipped: "
+                 << e.what();
+  } catch (...) {
+    LOG(WARNING) << "Kimera headless CBS pose belief publish skipped.";
+  }
+}
+
+void KimeraVioRos::publishHeadlessOdometryBelief(
+    const BackendOutput::ConstPtr& output) {
+  try {
+    CHECK(output);
+    if (!headless_cbs_belief_bridge_enable_ ||
+        output->cbs_outgoing_odom_beliefs_.empty()) {
+      return;
+    }
+
+    liorf::pose_odom_belief_array msg;
+    msg.header.stamp.fromNSec(output->timestamp_);
+    msg.header.frame_id = odom_frame_id_;
+    msg.beliefs.reserve(output->cbs_outgoing_odom_beliefs_.size());
+
+    const bool publishes_external_pose_frame =
+        (cbs_external_pose_frame_id_ != base_link_frame_id_);
+    gtsam::Pose3 base_T_external;
+    gtsam::Pose3 external_T_base;
+    if (publishes_external_pose_frame &&
+        !lookupExternalPoseFrameTransform(&base_T_external,
+                                          &external_T_base)) {
+      return;
+    }
+
+    for (const auto& cbs_belief : output->cbs_outgoing_odom_beliefs_) {
+      liorf::pose_odom_belief belief;
+      belief.header = msg.header;
+      belief.source_agent = cbs_belief.source_agent;
+      belief.from_pose_index = cbs_belief.from_pose_index;
+      belief.to_pose_index = cbs_belief.to_pose_index;
+      belief.from_stamp_sec = cbs_belief.from_stamp_sec;
+      belief.to_stamp_sec =
+          cbs_belief.to_stamp_sec > 0.0 ? cbs_belief.to_stamp_sec
+                                        : msg.header.stamp.toSec();
+      belief.relax_factor = cbs_belief.relax_factor;
+
+      gtsam::Pose3 relative_to_publish =
+          gtsam::Pose3::Expmap(toVector6(cbs_belief.relative_mu));
+      gtsam::Matrix6 covariance_to_publish =
+          sanitizePoseCovariance(toMatrix6(cbs_belief.covariance));
+      gtsam::Matrix6 conditional_A_to_publish =
+          toMatrix6(cbs_belief.conditional_A);
+
+      if (publishes_external_pose_frame) {
+        relative_to_publish =
+            external_T_base * relative_to_publish * base_T_external;
+        const gtsam::Matrix6 adjoint_external_base =
+            external_T_base.AdjointMap();
+        const gtsam::Matrix6 adjoint_base_external =
+            base_T_external.AdjointMap();
+        covariance_to_publish = sanitizePoseCovariance(
+            adjoint_external_base * covariance_to_publish *
+            adjoint_external_base.transpose());
+        conditional_A_to_publish =
+            adjoint_external_base * conditional_A_to_publish *
+            adjoint_base_external;
+      }
+
+      fromVector6(gtsam::Pose3::Logmap(relative_to_publish),
+                  &belief.relative_mu);
+      fromMatrix6(covariance_to_publish, &belief.covariance);
+      fromMatrix6(conditional_A_to_publish, &belief.conditional_A);
+      msg.beliefs.push_back(belief);
+    }
+
+    if (!msg.beliefs.empty()) {
+      pose_odom_belief_out_pub_.publish(msg);
+    }
+  } catch (const std::exception& e) {
+    LOG(WARNING) << "Kimera headless CBS odometry belief publish skipped: "
+                 << e.what();
+  } catch (...) {
+    LOG(WARNING) << "Kimera headless CBS odometry belief publish skipped.";
+  }
+}
+
+void KimeraVioRos::poseBeliefInCallback(
+    const liorf::pose_belief_arrayConstPtr& msg) {
+  try {
+    if (!msg) {
+      return;
+    }
+
+    std::vector<ExternalPoseBelief> converted_beliefs;
+    converted_beliefs.reserve(msg->beliefs.size());
+
+    gtsam::Pose3 base_T_external;
+    gtsam::Pose3 external_T_base;
+    if (cbs_external_pose_frame_id_ != base_link_frame_id_ &&
+        !lookupExternalPoseFrameTransform(&base_T_external, &external_T_base)) {
+      return;
+    }
+
+    for (const auto& belief : msg->beliefs) {
+      if (belief.source_agent == cbs_agent_id_) {
+        continue;
+      }
+
+      ExternalPoseBelief converted;
+      converted.source_agent = belief.source_agent;
+      converted.pose_index = belief.pose_index;
+      converted.sender_pose_index = belief.pose_index;
+      converted.stamp_sec = belief.stamp_sec > 0.0
+                                ? belief.stamp_sec
+                                : belief.header.stamp.toSec();
+      converted.sender_timestamp_ns = belief.header.stamp.toNSec();
+      converted.sender_frame_id = belief.header.frame_id;
+      converted.relax_factor = belief.relax_factor;
+
+      const gtsam::Pose3 sender_pose_raw =
+          gtsam::Pose3::Expmap(toVector6(belief.mu));
+      const gtsam::Matrix6 sender_covariance =
+          sanitizePoseCovariance(toMatrix6(belief.covariance));
+      gtsam::Pose3 transformed_pose = sender_pose_raw;
+      converted.sent_trace = sender_covariance.trace();
+      gtsam::Matrix6 transformed_covariance = sender_covariance;
+      std::string transform_label = "identity_external_equals_base";
+      const std::string receiver_expected_frame =
+          cbs_external_pose_frame_id_.empty() ? base_link_frame_id_
+                                              : cbs_external_pose_frame_id_;
+
+      if (cbs_external_pose_frame_id_ != base_link_frame_id_) {
+        transformed_pose = transformed_pose * external_T_base;
+        const gtsam::Matrix6 adjoint_base_external =
+            base_T_external.AdjointMap();
+        transformed_covariance = sanitizePoseCovariance(
+            adjoint_base_external * transformed_covariance *
+            adjoint_base_external.transpose());
+        transform_label = "external_to_base_compose_adjoint";
+      }
+
+      gtsam::Pose3 reconstructed_pose = sender_pose_raw;
+      gtsam::Matrix6 reconstructed_covariance = sender_covariance;
+      if (cbs_external_pose_frame_id_ != base_link_frame_id_) {
+        reconstructed_pose = sender_pose_raw * external_T_base;
+        const gtsam::Matrix6 adjoint_base_external =
+            base_T_external.AdjointMap();
+        reconstructed_covariance =
+            sanitizePoseCovariance(adjoint_base_external * sender_covariance *
+                                   adjoint_base_external.transpose());
+      }
+      const double mean_error_norm =
+          poseErrorNorm(transformed_pose, reconstructed_pose);
+      const double cov_error_fro =
+          (transformed_covariance - reconstructed_covariance).norm();
+      const double cov_symmetry_error =
+          (transformed_covariance - transformed_covariance.transpose()).norm();
+      const double min_eigenvalue =
+          minEigenvalueSymmetric(transformed_covariance);
+
+      gtsam::Pose3 roundtrip_pose = transformed_pose;
+      gtsam::Matrix6 roundtrip_covariance = transformed_covariance;
+      if (cbs_external_pose_frame_id_ != base_link_frame_id_) {
+        roundtrip_pose = transformed_pose * base_T_external;
+        const gtsam::Matrix6 adjoint_external_base =
+            external_T_base.AdjointMap();
+        roundtrip_covariance = sanitizePoseCovariance(
+            adjoint_external_base * transformed_covariance *
+            adjoint_external_base.transpose());
+      }
+      const double mean_roundtrip_error =
+          poseErrorNorm(roundtrip_pose, sender_pose_raw);
+      const double cov_roundtrip_error =
+          (roundtrip_covariance - sender_covariance).norm();
+
+      const std::string key_token = std::string("p:") +
+                                    static_cast<char>(belief.source_agent) +
+                                    ":" + std::to_string(belief.pose_index);
+      LOG(INFO) << "CBS_TRANSPORT_ROW_L2K," << key_token << ","
+                << converted.sender_timestamp_ns << ","
+                << sanitizeCsvToken(belief.header.frame_id) << ","
+                << sanitizeCsvToken(receiver_expected_frame) << ","
+                << sanitizeCsvToken(transform_label) << ","
+                << vector6ToToken(gtsam::Pose3::Logmap(sender_pose_raw)) << ","
+                << vector6ToToken(gtsam::Pose3::Logmap(transformed_pose)) << ","
+                << vector6ToToken(gtsam::Pose3::Logmap(reconstructed_pose))
+                << "," << mean_error_norm << ","
+                << matrix6ToToken(sender_covariance) << ","
+                << matrix6ToToken(transformed_covariance) << ","
+                << matrix6ToToken(reconstructed_covariance) << ","
+                << cov_error_fro << "," << cov_symmetry_error << ","
+                << min_eigenvalue << ",ok";
+      LOG(INFO) << "CBS_ROUNDTRIP_ROW_L2K," << key_token << ","
+                << converted.sender_timestamp_ns << "," << mean_roundtrip_error
+                << "," << cov_roundtrip_error << ",ok";
+
+      converted.received_trace = transformed_covariance.trace();
+      fromVector6(gtsam::Pose3::Logmap(transformed_pose), &converted.mu);
+      fromMatrix6(transformed_covariance, &converted.covariance);
+      converted_beliefs.push_back(converted);
+    }
+
+    bufferExternalBeliefs(converted_beliefs);
+  } catch (const std::exception& e) {
+    LOG(WARNING) << "Kimera headless CBS incoming belief callback skipped: "
+                 << e.what();
+  } catch (...) {
+    LOG(WARNING) << "Kimera headless CBS incoming belief callback skipped.";
+  }
+}
+
+void KimeraVioRos::poseOdomBeliefInCallback(
+    const liorf::pose_odom_belief_arrayConstPtr& msg) {
+  try {
+    if (!msg) {
+      return;
+    }
+
+    std::vector<ExternalOdometryBelief> converted_beliefs;
+    converted_beliefs.reserve(msg->beliefs.size());
+
+    gtsam::Pose3 base_T_external;
+    gtsam::Pose3 external_T_base;
+    if (cbs_external_pose_frame_id_ != base_link_frame_id_ &&
+        !lookupExternalPoseFrameTransform(&base_T_external, &external_T_base)) {
+      return;
+    }
+
+    for (const auto& belief : msg->beliefs) {
+      if (belief.source_agent == cbs_agent_id_) {
+        continue;
+      }
+
+      ExternalOdometryBelief converted;
+      converted.source_agent = belief.source_agent;
+      converted.from_pose_index = belief.from_pose_index;
+      converted.to_pose_index = belief.to_pose_index;
+      converted.sender_from_pose_index = belief.from_pose_index;
+      converted.sender_to_pose_index = belief.to_pose_index;
+      converted.from_stamp_sec = belief.from_stamp_sec;
+      converted.to_stamp_sec = belief.to_stamp_sec > 0.0
+                                   ? belief.to_stamp_sec
+                                   : belief.header.stamp.toSec();
+      converted.sender_timestamp_ns = belief.header.stamp.toNSec();
+      converted.sender_frame_id = belief.header.frame_id;
+      converted.relax_factor = belief.relax_factor;
+
+      gtsam::Pose3 transformed_relative =
+          gtsam::Pose3::Expmap(toVector6(belief.relative_mu));
+      gtsam::Matrix6 transformed_covariance =
+          sanitizePoseCovariance(toMatrix6(belief.covariance));
+      gtsam::Matrix6 transformed_A = toMatrix6(belief.conditional_A);
+
+      if (cbs_external_pose_frame_id_ != base_link_frame_id_) {
+        transformed_relative =
+            base_T_external * transformed_relative * external_T_base;
+        const gtsam::Matrix6 adjoint_base_external =
+            base_T_external.AdjointMap();
+        const gtsam::Matrix6 adjoint_external_base =
+            external_T_base.AdjointMap();
+        transformed_covariance = sanitizePoseCovariance(
+            adjoint_base_external * transformed_covariance *
+            adjoint_base_external.transpose());
+        transformed_A =
+            adjoint_base_external * transformed_A * adjoint_external_base;
+      }
+
+      fromVector6(gtsam::Pose3::Logmap(transformed_relative),
+                  &converted.relative_mu);
+      fromMatrix6(transformed_covariance, &converted.covariance);
+      fromMatrix6(transformed_A, &converted.conditional_A);
+      converted_beliefs.push_back(converted);
+    }
+
+    bufferExternalOdometryBeliefs(converted_beliefs);
+  } catch (const std::exception& e) {
+    LOG(WARNING) << "Kimera headless CBS incoming odometry belief callback "
+                    "skipped: "
+                 << e.what();
+  } catch (...) {
+    LOG(WARNING) << "Kimera headless CBS incoming odometry belief callback "
+                    "skipped.";
+  }
+}
+
+bool KimeraVioRos::lookupExternalPoseFrameTransform(
+    gtsam::Pose3* base_T_external,
+    gtsam::Pose3* external_T_base) {
+  CHECK_NOTNULL(base_T_external);
+  CHECK_NOTNULL(external_T_base);
+  if (cbs_external_pose_frame_id_ == base_link_frame_id_) {
+    *base_T_external = gtsam::Pose3();
+    *external_T_base = gtsam::Pose3();
+    return true;
+  }
+
+  tf::StampedTransform base_to_external_tf;
+  try {
+    tf_listener_.lookupTransform(base_link_frame_id_,
+                                 cbs_external_pose_frame_id_,
+                                 ros::Time(0),
+                                 base_to_external_tf);
+  } catch (const tf::TransformException& ex) {
+    ROS_WARN_STREAM_THROTTLE(2.0,
+                             "CBS belief frame transform unavailable for "
+                                 << base_link_frame_id_ << " -> "
+                                 << cbs_external_pose_frame_id_ << ": "
+                                 << ex.what());
+    return false;
+  }
+
+  geometry_msgs::Transform tf_msg;
+  tf_msg.translation.x = base_to_external_tf.getOrigin().x();
+  tf_msg.translation.y = base_to_external_tf.getOrigin().y();
+  tf_msg.translation.z = base_to_external_tf.getOrigin().z();
+  tf_msg.rotation.x = base_to_external_tf.getRotation().x();
+  tf_msg.rotation.y = base_to_external_tf.getRotation().y();
+  tf_msg.rotation.z = base_to_external_tf.getRotation().z();
+  tf_msg.rotation.w = base_to_external_tf.getRotation().w();
+
+  utils::rosTfToGtsamPose(tf_msg, base_T_external);
+  *external_T_base = base_T_external->inverse();
+  return true;
 }
 
 bool KimeraVioRos::restartKimeraVio(std_srvs::Trigger::Request& request,

@@ -11,10 +11,15 @@
 #include <kimera-vio/pipeline/Pipeline.h>
 #include <kimera-vio/utils/Macros.h>
 #include <mutex>
+#include <string>
 #include <vector>
+#include <tf/transform_listener.h>
 
+#include <liorf/pose_belief_array.h>
+#include <liorf/pose_odom_belief_array.h>
 #include "kimera_vio_ros/RosDataProviderInterface.h"
 #include "kimera_vio_ros/RosDisplay.h"
+#include "kimera_vio_ros/RosRerunVisualizer.h"
 #include "kimera_vio_ros/RosVisualizer.h"
 #include "kimera_vio_ros/RosLoopClosureVisualizer.h"
 #include "kimera_vio_ros/LcdRegistrationServer.h"
@@ -42,8 +47,34 @@ class KimeraVioRos {
 
   void bufferExternalBeliefs(
       const std::vector<ExternalPoseBelief>& beliefs);
+  void bufferExternalOdometryBeliefs(
+      const std::vector<ExternalOdometryBelief>& beliefs);
 
   void flushExternalBeliefsToPipeline();
+  void flushExternalOdometryBeliefsToPipeline();
+
+  void initializeHeadlessCbsBeliefBridge();
+
+  void initializeHeadlessOdometryPublisher();
+
+  void initializeHeadlessRerunVisualizer();
+
+  void publishHeadlessBackendOutput(const BackendOutput::ConstPtr& output);
+
+  void publishHeadlessOdometry(const BackendOutput::ConstPtr& output);
+
+  void publishHeadlessRerunBackendOutput(
+      const BackendOutput::ConstPtr& output);
+
+  void publishHeadlessPoseBelief(const BackendOutput::ConstPtr& output);
+  void publishHeadlessOdometryBelief(const BackendOutput::ConstPtr& output);
+
+  void poseBeliefInCallback(const liorf::pose_belief_arrayConstPtr& msg);
+  void poseOdomBeliefInCallback(
+      const liorf::pose_odom_belief_arrayConstPtr& msg);
+
+  bool lookupExternalPoseFrameTransform(gtsam::Pose3* base_T_external,
+                                        gtsam::Pose3* external_T_base);
 
   /**
    * @brief restartKimeraVio Callback for the rosservice to restart the pipeline
@@ -81,7 +112,32 @@ class KimeraVioRos {
 
   std::mutex external_beliefs_mutex_;
   std::deque<ExternalPoseBelief> pending_external_beliefs_;
+  std::deque<ExternalOdometryBelief> pending_external_odom_beliefs_;
   size_t external_beliefs_queue_limit_ = 800u;
+
+  bool headless_cbs_belief_bridge_enable_ = false;
+  bool headless_odometry_publish_enable_ = false;
+  bool headless_rerun_visualizer_enable_ = false;
+  bool headless_rerun_factor_graph_enable_ = true;
+  std::string odom_frame_id_;
+  std::string base_link_frame_id_;
+  std::string headless_rerun_recording_id_;
+  std::string headless_rerun_host_;
+  std::string cbs_belief_in_topic_;
+  std::string cbs_belief_out_topic_;
+  std::string cbs_odom_belief_in_topic_;
+  std::string cbs_odom_belief_out_topic_;
+  std::string cbs_external_pose_frame_id_;
+  uint8_t cbs_agent_id_ = static_cast<uint8_t>('k');
+  std::unique_ptr<RosRerunVisualizer> headless_rerun_visualizer_;
+  std::vector<gtsam::Pose3> headless_rerun_trajectory_;
+  int64_t headless_rerun_last_kf_id_ = -1;
+  ros::Publisher headless_odometry_pub_;
+  ros::Publisher pose_belief_out_pub_;
+  ros::Publisher pose_odom_belief_out_pub_;
+  ros::Subscriber pose_belief_in_sub_;
+  ros::Subscriber pose_odom_belief_in_sub_;
+  tf::TransformListener tf_listener_;
 };
 
 }  // namespace VIO

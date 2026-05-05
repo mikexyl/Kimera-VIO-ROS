@@ -43,6 +43,8 @@ file and include this one to launch KimeraVIO on the dataset of your choice -->
   <arg name="cbs_belief_bridge_enable" default="true"/>
   <arg name="cbs_belief_in_topic" default="/kimera/cbs/belief_in"/>
   <arg name="cbs_belief_out_topic" default="/kimera/cbs/belief_out"/>
+  <arg name="cbs_odom_belief_in_topic" default="/kimera/cbs/odom_belief_in"/>
+  <arg name="cbs_odom_belief_out_topic" default="/kimera/cbs/odom_belief_out"/>
   <arg name="cbs_belief_forward_queue_limit" default="800"/>
   <arg name="cbs_external_belief_timestamp_tolerance_sec" default="0.2"/>
   <arg name="cbs_external_pose_frame_id" default=""/>
@@ -56,6 +58,8 @@ file and include this one to launch KimeraVIO on the dataset of your choice -->
   <arg name="cbs_reject_first_message" default="true"/>
   <arg name="cbs_use_temporary_cbs_prior_factors" default="false"/>
   <arg name="cbs_use_temporary_cbs_linear_priors" default="true"/>
+  <arg name="cbs_belief_factor_mode" default="prior"/>
+  <arg name="cbs_use_sender_conditional_odom_factors" default="true"/>
   <arg name="cbs_temporary_linear_already_applied_gate_enable" default="true"/>
   <arg name="cbs_temporary_linear_already_applied_metric_threshold" default="0.01"/>
   <arg name="cbs_temporary_linear_already_applied_dmu_threshold" default="0.001"/>
@@ -185,6 +189,8 @@ file and include this one to launch KimeraVIO on the dataset of your choice -->
               --cbs_reject_first_message=$(arg cbs_reject_first_message)
               --cbs_use_temporary_cbs_prior_factors=$(arg cbs_use_temporary_cbs_prior_factors)
               --cbs_use_temporary_cbs_linear_priors=$(arg cbs_use_temporary_cbs_linear_priors)
+              --cbs_belief_factor_mode=$(arg cbs_belief_factor_mode)
+              --cbs_use_sender_conditional_odom_factors=$(arg cbs_use_sender_conditional_odom_factors)
               --cbs_temporary_linear_already_applied_gate_enable=$(arg cbs_temporary_linear_already_applied_gate_enable)
               --cbs_temporary_linear_already_applied_metric_threshold=$(arg cbs_temporary_linear_already_applied_metric_threshold)
               --cbs_temporary_linear_already_applied_dmu_threshold=$(arg cbs_temporary_linear_already_applied_dmu_threshold)
@@ -208,6 +214,8 @@ file and include this one to launch KimeraVIO on the dataset of your choice -->
     <param name="cbs_belief_bridge_enable" value="$(arg cbs_belief_bridge_enable)"/>
     <param name="cbs_belief_in_topic" value="$(arg cbs_belief_in_topic)"/>
     <param name="cbs_belief_out_topic" value="$(arg cbs_belief_out_topic)"/>
+    <param name="cbs_odom_belief_in_topic" value="$(arg cbs_odom_belief_in_topic)"/>
+    <param name="cbs_odom_belief_out_topic" value="$(arg cbs_odom_belief_out_topic)"/>
     <param name="cbs_belief_forward_queue_limit" value="$(arg cbs_belief_forward_queue_limit)"/>
     <param name="cbs_external_pose_frame_id" value="$(arg cbs_external_pose_frame_id)"/>
     <param name="rerun_visualizer_enable" value="$(arg rerun_visualizer_enable)"/>
