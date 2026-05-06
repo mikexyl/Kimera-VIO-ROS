@@ -61,6 +61,14 @@ gtsam::Matrix6 sanitizePoseCovariance(const gtsam::Matrix& state_covariance) {
   return pose_cov;
 }
 
+gtsam::Matrix6 poseCovarianceFromMatrix(const gtsam::Matrix& state_covariance) {
+  gtsam::Matrix6 pose_cov = gtsam::Matrix6::Identity() * 1e-3;
+  if (state_covariance.rows() >= 6 && state_covariance.cols() >= 6) {
+    pose_cov = gtsam::sub(state_covariance, 0, 6, 0, 6);
+  }
+  return pose_cov;
+}
+
 Eigen::Matrix3d sanitizeTranslationCovariance(
     const gtsam::Matrix& pose_covariance) {
   Eigen::Matrix3d covariance = Eigen::Matrix3d::Identity() * 1e-3;
@@ -912,14 +920,14 @@ void KimeraVioRos::publishHeadlessOdometryBelief(
       gtsam::Pose3 relative_to_publish =
           gtsam::Pose3::Expmap(toVector6(cbs_belief.relative_mu));
       gtsam::Matrix6 covariance_to_publish =
-          sanitizePoseCovariance(toMatrix6(cbs_belief.covariance));
+          poseCovarianceFromMatrix(toMatrix6(cbs_belief.covariance));
 
       if (publishes_external_pose_frame) {
         relative_to_publish =
             external_T_base * relative_to_publish * base_T_external;
         const gtsam::Matrix6 adjoint_external_base =
             external_T_base.AdjointMap();
-        covariance_to_publish = sanitizePoseCovariance(
+        covariance_to_publish = poseCovarianceFromMatrix(
             adjoint_external_base * covariance_to_publish *
             adjoint_external_base.transpose());
       }
@@ -980,14 +988,14 @@ void KimeraVioRos::poseOdomBeliefInCallback(
       gtsam::Pose3 transformed_relative =
           gtsam::Pose3::Expmap(toVector6(belief.relative_mu));
       gtsam::Matrix6 transformed_covariance =
-          sanitizePoseCovariance(toMatrix6(belief.covariance));
+          poseCovarianceFromMatrix(toMatrix6(belief.covariance));
 
       if (cbs_external_pose_frame_id_ != base_link_frame_id_) {
         transformed_relative =
             base_T_external * transformed_relative * external_T_base;
         const gtsam::Matrix6 adjoint_base_external =
             base_T_external.AdjointMap();
-        transformed_covariance = sanitizePoseCovariance(
+        transformed_covariance = poseCovarianceFromMatrix(
             adjoint_base_external * transformed_covariance *
             adjoint_base_external.transpose());
       }
