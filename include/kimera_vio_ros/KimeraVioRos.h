@@ -15,7 +15,6 @@
 #include <vector>
 #include <tf/transform_listener.h>
 
-#include <liorf/pose_belief_array.h>
 #include <liorf/pose_odom_belief_array.h>
 #include "kimera_vio_ros/RosDataProviderInterface.h"
 #include "kimera_vio_ros/RosDisplay.h"
@@ -45,12 +44,9 @@ class KimeraVioRos {
 
   void connectVIO();
 
-  void bufferExternalBeliefs(
-      const std::vector<ExternalPoseBelief>& beliefs);
   void bufferExternalOdometryBeliefs(
       const std::vector<ExternalOdometryBelief>& beliefs);
 
-  void flushExternalBeliefsToPipeline();
   void flushExternalOdometryBeliefsToPipeline();
 
   void initializeHeadlessCbsBeliefBridge();
@@ -66,10 +62,8 @@ class KimeraVioRos {
   void publishHeadlessRerunBackendOutput(
       const BackendOutput::ConstPtr& output);
 
-  void publishHeadlessPoseBelief(const BackendOutput::ConstPtr& output);
   void publishHeadlessOdometryBelief(const BackendOutput::ConstPtr& output);
 
-  void poseBeliefInCallback(const liorf::pose_belief_arrayConstPtr& msg);
   void poseOdomBeliefInCallback(
       const liorf::pose_odom_belief_arrayConstPtr& msg);
 
@@ -111,7 +105,6 @@ class KimeraVioRos {
   std::atomic_bool restart_vio_pipeline_;
 
   std::mutex external_beliefs_mutex_;
-  std::deque<ExternalPoseBelief> pending_external_beliefs_;
   std::deque<ExternalOdometryBelief> pending_external_odom_beliefs_;
   size_t external_beliefs_queue_limit_ = 800u;
 
@@ -123,8 +116,6 @@ class KimeraVioRos {
   std::string base_link_frame_id_;
   std::string headless_rerun_recording_id_;
   std::string headless_rerun_host_;
-  std::string cbs_belief_in_topic_;
-  std::string cbs_belief_out_topic_;
   std::string cbs_odom_belief_in_topic_;
   std::string cbs_odom_belief_out_topic_;
   std::string cbs_external_pose_frame_id_;
@@ -133,9 +124,7 @@ class KimeraVioRos {
   std::vector<gtsam::Pose3> headless_rerun_trajectory_;
   int64_t headless_rerun_last_kf_id_ = -1;
   ros::Publisher headless_odometry_pub_;
-  ros::Publisher pose_belief_out_pub_;
   ros::Publisher pose_odom_belief_out_pub_;
-  ros::Subscriber pose_belief_in_sub_;
   ros::Subscriber pose_odom_belief_in_sub_;
   tf::TransformListener tf_listener_;
 };
