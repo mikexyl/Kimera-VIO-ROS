@@ -338,9 +338,9 @@ KimeraVioRos::KimeraVioRos()
   nh_private_.param<std::string>("cbs_agent_id", cbs_agent_id, "k");
   cbs_agent_id_ = resolveAgentId(cbs_agent_id);
 
+  initializeHeadlessCbsBeliefBridge();
   if (!use_rviz_) {
     initializeHeadlessOdometryPublisher();
-    initializeHeadlessCbsBeliefBridge();
     initializeHeadlessRerunVisualizer();
   }
 }
@@ -438,9 +438,9 @@ bool KimeraVioRos::runKimeraVio() {
   }
 
   CHECK(vio_pipeline_) << "Vio pipeline construction failed.";
-  if (!use_rviz_ &&
-      (headless_odometry_publish_enable_ || headless_cbs_belief_bridge_enable_ ||
-       headless_rerun_visualizer_)) {
+  if (headless_cbs_belief_bridge_enable_ ||
+      (!use_rviz_ &&
+       (headless_odometry_publish_enable_ || headless_rerun_visualizer_))) {
     vio_pipeline_->registerExternalBackendOutputCallback(
         [this](const BackendOutput::Ptr& output) {
           publishHeadlessBackendOutput(output);
@@ -712,8 +712,10 @@ void KimeraVioRos::initializeHeadlessRerunVisualizer() {
 
 void KimeraVioRos::publishHeadlessBackendOutput(
     const BackendOutput::ConstPtr& output) {
-  publishHeadlessOdometry(output);
-  publishHeadlessRerunBackendOutput(output);
+  if (!use_rviz_) {
+    publishHeadlessOdometry(output);
+    publishHeadlessRerunBackendOutput(output);
+  }
   publishHeadlessOdometryBelief(output);
 }
 
@@ -983,6 +985,7 @@ void KimeraVioRos::poseOdomBeliefInCallback(
                                    : belief.header.stamp.toSec();
       converted.sender_timestamp_ns = belief.header.stamp.toNSec();
       converted.sender_frame_id = belief.header.frame_id;
+      converted.received_wall_time_sec = ros::WallTime::now().toSec();
       converted.relax_factor = belief.relax_factor;
 
       gtsam::Pose3 transformed_relative =
