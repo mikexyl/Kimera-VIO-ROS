@@ -814,6 +814,9 @@ void KimeraVioRos::publishHeadlessRerunBackendOutput(
 
     if (headless_cbs_belief_bridge_enable_) {
       headless_rerun_visualizer_->drawScalar(
+          "kimera/cbs/beliefs/published_per_update",
+          output->cbs_outgoing_odom_beliefs_.size());
+      headless_rerun_visualizer_->drawScalar(
           "kimera/cbs/beliefs/received_per_update",
           output->external_beliefs_received_per_update_);
       headless_rerun_visualizer_->drawScalar(

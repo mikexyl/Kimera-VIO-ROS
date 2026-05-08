@@ -510,8 +510,7 @@ void RosVisualizer::publishRerunBackendOutput(
   if (cbs_belief_bridge_enable_) {
     rerun_visualizer_->drawScalar(
         "kimera/cbs/beliefs/published_per_update",
-        rerun_cbs_beliefs_published_per_update_.exchange(
-            0u, std::memory_order_relaxed));
+        output->cbs_outgoing_odom_beliefs_.size());
     rerun_visualizer_->drawScalar(
         "kimera/cbs/beliefs/received_per_update",
         output->external_beliefs_received_per_update_);

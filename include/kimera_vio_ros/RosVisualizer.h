@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include <atomic>
 #include <cstdint>
 #include <mutex>
 #include <string>
@@ -137,7 +136,6 @@ class RosVisualizer : public Visualizer3D {
   int64_t rerun_last_kf_id_ = -1;
   bool rerun_factor_graph_enable_ = true;
   bool rerun_world_alignment_enable_ = true;
-  std::atomic<size_t> rerun_cbs_beliefs_published_per_update_{0u};
 
   struct RerunTimedPose {
     uint64_t timestamp_ns = 0u;
