@@ -137,7 +137,6 @@ class RosVisualizer : public Visualizer3D {
   int64_t rerun_last_kf_id_ = -1;
   bool rerun_factor_graph_enable_ = true;
   bool rerun_world_alignment_enable_ = true;
-  std::atomic<size_t> rerun_cbs_beliefs_received_per_update_{0u};
   std::atomic<size_t> rerun_cbs_beliefs_published_per_update_{0u};
 
   struct RerunTimedPose {

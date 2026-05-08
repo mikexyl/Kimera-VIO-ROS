@@ -514,8 +514,7 @@ void RosVisualizer::publishRerunBackendOutput(
             0u, std::memory_order_relaxed));
     rerun_visualizer_->drawScalar(
         "kimera/cbs/beliefs/received_per_update",
-        rerun_cbs_beliefs_received_per_update_.exchange(
-            0u, std::memory_order_relaxed));
+        output->external_beliefs_received_per_update_);
     rerun_visualizer_->drawScalar(
         "kimera/cbs/beliefs/added_to_factor_graph_per_update",
         output->external_beliefs_added_per_update_);
