@@ -8,7 +8,6 @@
 
 #include <atomic>
 #include <cstdint>
-#include <functional>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -29,7 +28,6 @@
 
 #include <opencv2/opencv.hpp>
 
-#include <liorf/pose_belief_array.h>
 #include "kimera_vio_ros/RosPublishers.h"
 #include "kimera_vio_ros/RosRerunVisualizer.h"
 
@@ -64,13 +62,6 @@ class RosVisualizer : public Visualizer3D {
   VisualizerOutput::UniquePtr spinOnce(
       const VisualizerInput& viz_input) override;
 
-  using IncomingBeliefsCallback =
-      std::function<void(const std::vector<ExternalPoseBelief>& beliefs)>;
-
-  void registerIncomingBeliefsCallback(const IncomingBeliefsCallback& callback) {
-    incoming_beliefs_callback_ = callback;
-  }
-
  protected:
   // Publish VIO outputs.
   virtual void publishBackendOutput(const BackendOutput::ConstPtr& output);
@@ -81,11 +72,6 @@ class RosVisualizer : public Visualizer3D {
   virtual void publishMesherOutput(const MesherOutput::ConstPtr& output) const;
 
  private:
-  void publishPoseBelief(const BackendOutput::ConstPtr& output);
-
-  void poseBeliefInCallback(const liorf::pose_belief_arrayConstPtr& msg);
-
-  static uint8_t resolveAgentId(const std::string& agent_id);
   bool lookupExternalPoseFrameTransform(gtsam::Pose3* base_T_external,
                                         gtsam::Pose3* external_T_base);
 
@@ -128,9 +114,6 @@ class RosVisualizer : public Visualizer3D {
   ros::Publisher resiliency_pub_;
   ros::Publisher frontend_stats_pub_;
   ros::Publisher imu_bias_pub_;
-  ros::Publisher pose_belief_out_pub_;
-
-  ros::Subscriber pose_belief_in_sub_;
 
   //! Define tf broadcaster for world to base_link (IMU) and to map (PGO).
   tf::TransformBroadcaster tf_broadcaster_;
@@ -141,8 +124,6 @@ class RosVisualizer : public Visualizer3D {
   std::string odom_frame_id_;
   std::string base_link_frame_id_;
   std::string map_frame_id_;
-  std::string cbs_belief_in_topic_;
-  std::string cbs_belief_out_topic_;
   std::string cbs_external_pose_frame_id_;
 
   cv::Size image_size_;
@@ -151,8 +132,6 @@ class RosVisualizer : public Visualizer3D {
   std::unique_ptr<ImagePublishers> image_publishers_;
 
   bool cbs_belief_bridge_enable_ = true;
-  uint8_t cbs_agent_id_ = static_cast<uint8_t>('k');
-  IncomingBeliefsCallback incoming_beliefs_callback_;
   std::unique_ptr<RosRerunVisualizer> rerun_visualizer_;
   std::vector<gtsam::Pose3> rerun_trajectory_;
   int64_t rerun_last_kf_id_ = -1;
